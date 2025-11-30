@@ -15,9 +15,6 @@ fn main() {
         ..Default::default()
     });
 
-    //let subpass_info = {...};
-    //let begin_info = {target, ...};
-    let stream = CommandStream::new();
     let p_layout = context
         .make_graphics_pipeline_layout(&GraphicsPipelineLayoutInfo {
             debug_name: todo!(),
@@ -28,7 +25,6 @@ fn main() {
             details: todo!(),
         })
         .expect("Make Pipeline Layout");
-
 
     let pso = context
         .make_graphics_pipeline(&GraphicsPipelineInfo::default())
@@ -61,9 +57,11 @@ fn main() {
                     indices: indices.handle,
                     ..Default::default()
                 });
-            });
 
-            graph.execute();
+                return s.unbind_graphics_pipeline();
+            });
         }
+
+        graph.execute();
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ptr::NonNull};
 
 use dashi::*;
 use driver::command::BeginRenderPass;
@@ -10,11 +10,19 @@ pub struct Ring<T, const N: usize> {
 
 impl<T: Default, const N: usize> Ring<T, N> {
     pub fn new(&mut self) -> Self {
-        todo!()
+        todo!("Fill with defaults.")
+    }
+
+    pub fn new_with(data: &[T]) {
+        todo!("Fill slots with data. Assert data.len() >= N")
+    }
+
+    pub fn set(&mut self, data: T, idx: usize) {
+        todo!("Fill slot with data.")
     }
 
     pub fn advance(&mut self) {
-        todo!()
+        todo!("Advance current frame")
     }
 
     pub fn current(&self) -> usize {
@@ -32,6 +40,7 @@ impl<T: Default, const N: usize> Ring<T, N> {
 
 const MAX_FRAMES: usize = 3;
 pub struct TransientAllocator {
+    ctx: NonNull<Context>,
     images: Ring<HashMap<Handle<Image>, ImageInfo<'static>>, MAX_FRAMES>,
     buffers: Ring<HashMap<Handle<Buffer>, BufferInfo<'static>>, MAX_FRAMES>,
     renderpasses: Ring<HashMap<Handle<RenderPass>, RenderPassInfo<'static>>, MAX_FRAMES>,
@@ -39,31 +48,31 @@ pub struct TransientAllocator {
 
 impl TransientAllocator {
     pub fn new(ctx: &mut Context) -> Self {
-        todo!()
+        todo!("Allocate with empty hashmaps. Need some specifier for 'taken' vs 'available'. Maybe two maps?")
     }
 
     // Helper function to check for stale data and remove it.
     fn check_for_stale(&mut self) {
-        todo!()
+        todo!("Check for stale data and release it")
     }
 
     pub fn advance(&mut self) {
         // advance
         self.check_for_stale();
-        todo!()
+        todo!("Advance rings")
     }
 
     // Make a transient image matching the parameters input from this frame.
     pub fn make_image(&mut self, info: &ImageInfo) -> ImageView {
-        todo!()
+        todo!("Check if existing available image matches criteria, else create one")
     }
 
     // Make a transient buffer matching the parameters input
     pub fn make_buffer(&mut self, info: &BufferInfo) -> BufferView {
-        todo!()
+        todo!("Check if existing available buffer matches criteria, else create one")
     }
 
     pub fn make_render_pass(&mut self, info: &RenderPassInfo) -> Handle<RenderPass> {
-        todo!()
+        todo!("Check if available render_pass matches criteria, else create one")
     }
 }
