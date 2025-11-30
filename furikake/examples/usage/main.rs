@@ -292,14 +292,19 @@ fn main() {
                 ..Default::default()
             },
             pipeline,
-            color_attachments: [Some(target_view), None, None, None],
+            color_attachments: [Some(target_view), None, None, None, None, None, None, None],
             depth_attachment: None,
             clear_values: [
                 Some(ClearValue::Color([0.05, 0.05, 0.1, 1.0])),
                 None,
                 None,
                 None,
+                None,
+                None,
+                None,
+                None,
             ],
+            ..Default::default()
         });
 
         draw.draw_indexed(&DrawIndexed {

@@ -3,6 +3,8 @@ use std::ptr::NonNull;
 use cmd::{Graphics, PendingGraphics};
 use dashi::*;
 
+use crate::transient::TransientAllocator;
+
 #[derive(Default, Debug, Clone)]
 pub struct SubpassInfo {
     pub viewport: Viewport,
@@ -14,6 +16,7 @@ pub struct SubpassInfo {
 
 pub struct RenderGraph {
     ctx: NonNull<Context>,
+    alloc: TransientAllocator,
 }
 
 impl RenderGraph {
@@ -39,12 +42,12 @@ impl RenderGraph {
         todo!()
     }
 
-    // All transient data in this object is per-frame. This function advances the frame count to
-    // use next frame's resources.
-    fn advance_frame(&mut self) {}
-
+    fn solve_and_cache(&mut self) {
+        // Solve graph and cache it for future use
+        todo!()
+    }
     pub fn execute(&mut self) {
-        self.advance_frame();
+        self.alloc.advance();
         todo!()
     }
 }
