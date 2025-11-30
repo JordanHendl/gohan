@@ -272,6 +272,7 @@ mod tests {
             inputs: Vec::new(),
             outputs: Vec::new(),
             workgroup_size: None,
+            vertex: Default::default(),
         }
     }
 

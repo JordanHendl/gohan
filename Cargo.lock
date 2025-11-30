@@ -128,23 +128,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bento"
-version = "0.1.0"
-source = "git+https://github.com/JordanHendl/bento#3c84ca7459f1c5967142c366bfb9074003f7bccf"
-dependencies = [
- "bincode",
- "clap",
- "dashi",
- "regex",
- "rspirv",
- "rspirv-reflect",
- "serde",
- "serde_json",
- "shaderc",
- "thiserror",
-]
-
-[[package]]
 name = "bincode"
 version = "1.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -596,7 +579,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 name = "furikake"
 version = "0.1.0"
 dependencies = [
- "bento 0.1.0 (git+https://github.com/JordanHendl/bento)",
+ "bento",
  "dashi",
  "glam",
  "inline-spirv",
