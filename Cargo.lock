@@ -1482,6 +1482,11 @@ dependencies = [
 [[package]]
 name = "tare"
 version = "0.1.0"
+dependencies = [
+ "bento",
+ "dashi",
+ "glam",
+]
 
 [[package]]
 name = "tempfile"
