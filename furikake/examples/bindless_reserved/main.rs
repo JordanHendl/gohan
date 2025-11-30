@@ -1,0 +1,247 @@
+use bento::{Compiler, OptimizationLevel, Request, ShaderLang};
+use dashi::{Context, ContextInfo, ShaderType};
+use furikake::recipe::RecipeBook;
+use furikake::reservations::ReservedTiming;
+use furikake::reservations::bindless_camera::ReservedBindlessCamera;
+use furikake::reservations::bindless_materials::ReservedBindlessMaterials;
+use furikake::reservations::bindless_textures::ReservedBindlessTextures;
+use furikake::reservations::bindless_transformations::ReservedBindlessTransformations;
+use furikake::{BindlessState, Resolver};
+use glam::{Mat4, Quat, Vec3};
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+struct TimingData {
+    current_time_ms: f32,
+    frame_time_ms: f32,
+}
+
+fn compile_shader() -> bento::CompilationResult {
+    let source = r#"
+        #version 450 core
+        layout(local_size_x = 1) in;
+
+        layout(set = 0, binding = 0) uniform timing {
+            float current_time_ms;
+            float frame_time_ms;
+        } meshi_timing;
+
+        struct Camera {
+            vec3 position;
+            float _padding0;
+            vec4 rotation;
+        };
+        layout(set = 1, binding = 0) buffer Cameras {
+            Camera cameras[];
+        } meshi_bindless_camera;
+
+        struct Texture {
+            uint id;
+            uint width;
+            uint height;
+            uint mip_levels;
+        };
+        layout(set = 2, binding = 0) buffer Textures {
+            Texture textures[];
+        } meshi_bindless_textures;
+
+        layout(set = 3, binding = 0) buffer Transformations {
+            mat4 transforms[];
+        } meshi_bindless_transformations;
+
+        struct Material {
+            uint base_color_texture_id;
+            uint normal_texture_id;
+            uint metallic_roughness_texture_id;
+            uint occlusion_texture_id;
+            uint emissive_texture_id;
+            uint _padding;
+        };
+        layout(set = 4, binding = 0) buffer Materials {
+            Material materials[];
+        } meshi_bindless_materials;
+
+        void main() {
+            float time_mix = meshi_timing.frame_time_ms * 0.001;
+            vec3 camera_dir = normalize(meshi_bindless_camera.cameras[0].rotation.xyz);
+            uint texture_id = meshi_bindless_textures.textures[0].id;
+            mat4 model = meshi_bindless_transformations.transforms[0];
+            uint material_tex = meshi_bindless_materials.materials[0].base_color_texture_id;
+
+            if (time_mix + camera_dir.x + float(texture_id + material_tex) + model[0][0] > -1.0) {
+                // reference everything so the compiler keeps all reserved bindings
+            }
+        }
+    "#;
+
+    let compiler = Compiler::new().expect("create bento compiler");
+    compiler
+        .compile(
+            source.as_bytes(),
+            &Request {
+                name: Some("bindless_reserved_compute".to_string()),
+                lang: ShaderLang::Glsl,
+                stage: ShaderType::Compute,
+                optimization: OptimizationLevel::None,
+                debug_symbols: true,
+            },
+        )
+        .expect("compile compute shader")
+}
+
+fn main() {
+    let mut ctx = Context::headless(&ContextInfo::default()).expect("create dashi context");
+    let mut state = BindlessState::new(&mut ctx);
+
+    let shader = compile_shader();
+    let resolver = Resolver::new(&state, &shader).expect("reflect all reserved bindings");
+    println!(
+        "Validated bindless reserved bindings: {:?}",
+        resolver.resolved()
+    );
+
+    let book = RecipeBook::new(&mut ctx, &state, &[shader]).expect("build recipe book");
+    let (mut bg_recipes, mut bt_recipes) = book.recipes();
+    println!("Bind group recipes: {}", bg_recipes.len());
+    for recipe in &bg_recipes {
+        let set = recipe.bindings.first().map(|b| b.var.set).unwrap_or(0);
+        println!("  set {set} -> {} binding(s)", recipe.bindings.len());
+    }
+
+    println!("Bind table recipes: {}", bt_recipes.len());
+    for recipe in &bt_recipes {
+        let set = recipe.bindings.first().map(|b| b.var.set).unwrap_or(0);
+        println!(
+            "  set {set} -> {} indexed binding(s)",
+            recipe.bindings.len()
+        );
+    }
+
+    // Allocate and mutate every bindless reservation.
+    let mut camera_handle = None;
+    state
+        .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_camera", |cameras| {
+            let handle = cameras.add_camera();
+            let camera = cameras.camera_mut(handle);
+            *camera =
+                furikake::types::Camera::new(Vec3::new(1.0, 2.0, 3.0), Quat::from_rotation_y(1.2));
+            camera_handle = Some(handle);
+        })
+        .expect("mutate cameras");
+
+    let mut texture_handle = None;
+    state
+        .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
+            let handle = textures.add_texture();
+            let texture = textures.texture_mut(handle);
+            texture.id = 7;
+            texture.width = 2048;
+            texture.height = 1024;
+            texture.mip_levels = 5;
+            texture_handle = Some(handle);
+        })
+        .expect("mutate textures");
+
+    let mut transform_handle = None;
+    state
+        .reserved_mut::<ReservedBindlessTransformations, _>(
+            "meshi_bindless_transformations",
+            |transforms| {
+                let handle = transforms.add_transformation();
+                transforms.transformation_mut(handle).transform =
+                    Mat4::from_translation(Vec3::new(4.0, 5.0, 6.0));
+                transform_handle = Some(handle);
+            },
+        )
+        .expect("mutate transformations");
+
+    let mut material_handle = None;
+    state
+        .reserved_mut::<ReservedBindlessMaterials, _>("meshi_bindless_materials", |materials| {
+            let handle = materials.add_material();
+            let material = materials.material_mut(handle);
+            material.base_color_texture_id = 2;
+            material.normal_texture_id = 3;
+            material.metallic_roughness_texture_id = 4;
+            material.occlusion_texture_id = 5;
+            material.emissive_texture_id = 6;
+            material_handle = Some(handle);
+        })
+        .expect("mutate materials");
+
+    // Drive timing forward and flush any host-side changes.
+    state.update().expect("refresh reserved state");
+
+    let timing = state
+        .reserved::<ReservedTiming>("meshi_timing")
+        .expect("access reserved timing");
+    let timing_map = ctx
+        .map_buffer::<TimingData>(timing.buffer())
+        .expect("map timing buffer");
+    println!(
+        "Timing snapshot -> current: {:.3}ms | frame: {:.3}ms",
+        timing_map[0].current_time_ms, timing_map[0].frame_time_ms
+    );
+    ctx.unmap_buffer(timing.buffer())
+        .expect("unmap timing buffer after read");
+
+    let cameras = state
+        .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
+        .expect("camera reservation");
+    let textures = state
+        .reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
+        .expect("texture reservation");
+    let transforms = state
+        .reserved::<ReservedBindlessTransformations>("meshi_bindless_transformations")
+        .expect("transform reservation");
+    let materials = state
+        .reserved::<ReservedBindlessMaterials>("meshi_bindless_materials")
+        .expect("material reservation");
+
+    let camera_handle = camera_handle.expect("camera handle");
+    let texture_handle = texture_handle.expect("texture handle");
+    let transform_handle = transform_handle.expect("transform handle");
+    let material_handle = material_handle.expect("material handle");
+
+    println!(
+        "Camera[{}] position: {:?}",
+        camera_handle.slot,
+        cameras.camera(camera_handle).position
+    );
+    println!(
+        "Texture[{}] -> id {} | {}x{} ({} mips)",
+        texture_handle.slot,
+        textures.texture(texture_handle).id,
+        textures.texture(texture_handle).width,
+        textures.texture(texture_handle).height,
+        textures.texture(texture_handle).mip_levels,
+    );
+    println!(
+        "Transform[{}] translation: {:?}",
+        transform_handle.slot,
+        transforms
+            .transformation(transform_handle)
+            .transform
+            .w_axis
+            .truncate()
+    );
+    println!(
+        "Material[{}] texture ids: base={} normal={} m/r={} occ={} emissive={}",
+        material_handle.slot,
+        materials.material(material_handle).base_color_texture_id,
+        materials.material(material_handle).normal_texture_id,
+        materials
+            .material(material_handle)
+            .metallic_roughness_texture_id,
+        materials.material(material_handle).occlusion_texture_id,
+        materials.material(material_handle).emissive_texture_id,
+    );
+
+    // Cook the bindless resources after we've populated data to mirror real usage.
+    for mut recipe in bg_recipes.drain(..) {
+        let _group = recipe.cook(&mut ctx).expect("cook bind group");
+    }
+    for mut recipe in bt_recipes.drain(..) {
+        let _table = recipe.cook(&mut ctx).expect("cook bind table");
+    }
+}

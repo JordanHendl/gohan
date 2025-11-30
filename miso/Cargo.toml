@@ -1,0 +1,16 @@
+[package]
+name = "miso"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[build-dependencies]
+walkdir = "2.4.0"
+
+[package.metadata.slang]
+# Defaults for SLANG_SRC_DIR and SLANG_OUT_DIR
+src_dir = "src/slang/src"
+out_dir = "target/spirv"
+
+[lib]

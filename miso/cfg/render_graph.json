@@ -1,0 +1,45 @@
+{
+  "render_pass": {
+    "subpasses": [
+      {
+        "name": "main-pass",
+        "attachments": [
+          {
+            "name": "color",
+            "type": "Color",
+            "size": [1280, 1024]
+          },
+          {
+            "name": "depth",
+            "type": "Depth",
+            "size": [1280, 1024]
+          }
+        ]
+      }
+    ]
+  },
+  
+  "cameras": [ {
+      "name": "main-camera",
+      "transform": [1.0, 0.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0, 0.0,
+                    0.0, 0.0, 1.0, 0.0,
+                    0.0, 0.0, 0.0, 1.0]
+    }
+  ],
+
+
+  "passes": [ {
+      "name": "non-transparent",
+      "camera": "main-camera",
+      "graphics": "standard",
+      "subpass": 0,
+      "render_masks": ["standard"]
+    }],
+
+  "display": {
+    "name": "Miso",
+    "size": [1280, 1024],
+    "input": "main-pass.color"
+  }
+}

@@ -1,0 +1,19 @@
+[package]
+name = "furikake"
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev.package."*"]
+debug = false
+
+[dependencies]
+glam = "0.24.0"  # For vector math (Vec2 and Vec3)
+dashi = {git = "https://github.com/JordanHendl/dashi"}
+bento = {git = "https://github.com/JordanHendl/bento"}
+
+[dev-dependencies]
+rand = "0.8"
+tempfile = "3"
+inline-spirv = "0.2.1"
+
+[lib]
