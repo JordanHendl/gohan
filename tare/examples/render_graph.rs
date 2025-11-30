@@ -15,14 +15,18 @@ fn main() {
         ..Default::default()
     });
 
-    let p_layout = context
+    let _p_layout = context
         .make_graphics_pipeline_layout(&GraphicsPipelineLayoutInfo {
-            debug_name: todo!(),
-            vertex_info: todo!(),
-            bg_layouts: todo!(),
-            bt_layouts: todo!(),
-            shaders: todo!(),
-            details: todo!(),
+            debug_name: "example-pipeline",
+            vertex_info: VertexDescriptionInfo {
+                entries: &[],
+                stride: 0,
+                rate: VertexRate::Vertex,
+            },
+            bg_layouts: [None, None, None, None],
+            bt_layouts: [None, None, None, None],
+            shaders: &[],
+            details: GraphicsPipelineDetails::default(),
         })
         .expect("Make Pipeline Layout");
 
@@ -32,24 +36,42 @@ fn main() {
 
     let subpasses = vec![
         SubpassInfo {
-            viewport: todo!(),
-            color_attachments: todo!(),
-            depth_attachment: todo!(),
-            clear_values: todo!(),
-            depth_clear: todo!(),
+            viewport: Viewport::default(),
+            color_attachments: [Some(target), None, None, None, None, None, None, None],
+            depth_attachment: None,
+            clear_values: [
+                Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            depth_clear: None,
         },
         SubpassInfo {
-            viewport: todo!(),
-            color_attachments: todo!(),
-            depth_attachment: todo!(),
-            clear_values: todo!(),
-            depth_clear: todo!(),
+            viewport: Viewport::default(),
+            color_attachments: [Some(target), None, None, None, None, None, None, None],
+            depth_attachment: None,
+            clear_values: [
+                Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            depth_clear: None,
         },
     ];
 
     loop {
         for subpass in &subpasses {
-            graph.add_subpass(subpass, |stream| {
+            graph.add_subpass(subpass, move |stream| {
                 let mut s = stream.bind_graphics_pipeline(pso);
 
                 s.draw_indexed(&DrawIndexed {
