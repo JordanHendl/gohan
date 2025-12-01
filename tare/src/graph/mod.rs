@@ -152,8 +152,12 @@ impl RenderGraph {
 
         Some((render_pass, begin))
     }
-
+    
     pub fn execute(&mut self) {
+        self.execute_with(&Default::default());
+    }
+
+    pub fn execute_with(&mut self, info: &SubmitInfo) {
         let Some((_render_pass, begin)) = self.solve_and_cache() else {
             return;
         };
@@ -177,7 +181,7 @@ impl RenderGraph {
             .expect("Failed to record render graph commands");
 
         self.ring
-            .submit(&SubmitInfo::default())
+            .submit(info)
             .expect("Failed to submit render graph commands");
 
         // Advance transient allocator
