@@ -8,6 +8,7 @@ use furikake::reservations::bindless_textures::ReservedBindlessTextures;
 use furikake::reservations::bindless_transformations::ReservedBindlessTransformations;
 use furikake::{BindlessState, Resolver};
 use glam::{Mat4, Quat, Vec3};
+use std::time::{Duration, Instant};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -185,6 +186,118 @@ fn main() {
     ctx.unmap_buffer(timing.buffer())
         .expect("unmap timing buffer after read");
 
+    let camera_handle = camera_handle.expect("camera handle");
+    let texture_handle = texture_handle.expect("texture handle");
+    let transform_handle = transform_handle.expect("transform handle");
+    let material_handle = material_handle.expect("material handle");
+
+    {
+        let cameras = state
+            .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
+            .expect("camera reservation");
+        let textures = state
+            .reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
+            .expect("texture reservation");
+        let transforms = state
+            .reserved::<ReservedBindlessTransformations>("meshi_bindless_transformations")
+            .expect("transform reservation");
+        let materials = state
+            .reserved::<ReservedBindlessMaterials>("meshi_bindless_materials")
+            .expect("material reservation");
+
+        println!(
+            "Camera[{}] position: {:?}",
+            camera_handle.slot,
+            cameras.camera(camera_handle).position
+        );
+        println!(
+            "Texture[{}] -> id {} | {}x{} ({} mips)",
+            texture_handle.slot,
+            textures.texture(texture_handle).id,
+            textures.texture(texture_handle).width,
+            textures.texture(texture_handle).height,
+            textures.texture(texture_handle).mip_levels,
+        );
+        println!(
+            "Transform[{}] translation: {:?}",
+            transform_handle.slot,
+            transforms
+                .transformation(transform_handle)
+                .transform
+                .w_axis
+                .truncate()
+        );
+        println!(
+            "Material[{}] texture ids: base={} normal={} m/r={} occ={} emissive={}",
+            material_handle.slot,
+            materials.material(material_handle).base_color_texture_id,
+            materials.material(material_handle).normal_texture_id,
+            materials
+                .material(material_handle)
+                .metallic_roughness_texture_id,
+            materials.material(material_handle).occlusion_texture_id,
+            materials.material(material_handle).emissive_texture_id,
+        );
+    }
+
+    // Simulate a later frame where we tweak every reservation again.
+    state
+        .reserved_mut::<ReservedTiming, _>("meshi_timing", |timing| {
+            // Pretend the last frame ended 240ms ago.
+            timing.set_last_time(Instant::now() - Duration::from_millis(240));
+        })
+        .expect("backdate timing");
+
+    state
+        .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_camera", |cameras| {
+            let cam = cameras.camera_mut(camera_handle);
+            cam.position += Vec3::new(0.5, -0.25, 1.0);
+            cam.rotation = Quat::from_rotation_y(1.57);
+        })
+        .expect("tweak camera per-frame");
+
+    state
+        .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
+            let tex = textures.texture_mut(texture_handle);
+            tex.id = 99;
+            tex.width = 4096;
+        })
+        .expect("mutate texture slot");
+
+    state
+        .reserved_mut::<ReservedBindlessTransformations, _>(
+            "meshi_bindless_transformations",
+            |transforms| {
+                let transform = transforms.transformation_mut(transform_handle);
+                transform.transform =
+                    Mat4::from_rotation_z(0.5) * Mat4::from_translation(Vec3::new(0.0, 1.0, 0.0));
+            },
+        )
+        .expect("refresh transform per-frame");
+
+    state
+        .reserved_mut::<ReservedBindlessMaterials, _>("meshi_bindless_materials", |materials| {
+            let material = materials.material_mut(material_handle);
+            material.base_color_texture_id = texture_handle.slot as u16;
+            material.normal_texture_id = texture_handle.slot as u16 + 1;
+        })
+        .expect("adjust material bindings");
+
+    state.update().expect("flush second round of edits");
+
+    let timing = state
+        .reserved::<ReservedTiming>("meshi_timing")
+        .expect("access reserved timing");
+    let timing_map = ctx
+        .map_buffer::<TimingData>(timing.buffer())
+        .expect("map timing buffer");
+    println!(
+        "After runtime edits -> current: {:.3}ms | frame: {:.3}ms",
+        timing_map[0].current_time_ms, timing_map[0].frame_time_ms
+    );
+    ctx.unmap_buffer(timing.buffer())
+        .expect("unmap timing buffer after edits");
+
     let cameras = state
         .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
         .expect("camera reservation");
@@ -198,18 +311,13 @@ fn main() {
         .reserved::<ReservedBindlessMaterials>("meshi_bindless_materials")
         .expect("material reservation");
 
-    let camera_handle = camera_handle.expect("camera handle");
-    let texture_handle = texture_handle.expect("texture handle");
-    let transform_handle = transform_handle.expect("transform handle");
-    let material_handle = material_handle.expect("material handle");
-
     println!(
-        "Camera[{}] position: {:?}",
+        "Camera[{}] position (mutated): {:?}",
         camera_handle.slot,
         cameras.camera(camera_handle).position
     );
     println!(
-        "Texture[{}] -> id {} | {}x{} ({} mips)",
+        "Texture[{}] -> id {} | {}x{} ({} mips) after runtime swap",
         texture_handle.slot,
         textures.texture(texture_handle).id,
         textures.texture(texture_handle).width,
@@ -217,7 +325,7 @@ fn main() {
         textures.texture(texture_handle).mip_levels,
     );
     println!(
-        "Transform[{}] translation: {:?}",
+        "Transform[{}] translation after runtime edit: {:?}",
         transform_handle.slot,
         transforms
             .transformation(transform_handle)
@@ -226,7 +334,7 @@ fn main() {
             .truncate()
     );
     println!(
-        "Material[{}] texture ids: base={} normal={} m/r={} occ={} emissive={}",
+        "Material[{}] texture ids after runtime edit: base={} normal={} m/r={} occ={} emissive={}",
         material_handle.slot,
         materials.material(material_handle).base_color_texture_id,
         materials.material(material_handle).normal_texture_id,
