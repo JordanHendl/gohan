@@ -1,4 +1,4 @@
-use cmd::{CommandStream, PendingGraphics};
+use cmd::{CommandStream, Executable, PendingGraphics, Recording};
 use dashi::{execution::CommandRing, *};
 use driver::command::BeginRenderPass;
 
@@ -16,7 +16,7 @@ pub struct SubpassInfo {
 pub struct RenderGraph {
     alloc: TransientAllocator,
     ring: CommandRing,
-    subpasses: Vec<StoredSubpass>,
+    passes: Vec<GraphPass>,
     cached_render_passes: Vec<Handle<RenderPass>>,
     cached_begins: Vec<BeginRenderPass>,
 }
@@ -24,6 +24,15 @@ pub struct RenderGraph {
 struct StoredSubpass {
     info: SubpassInfo,
     cb: Box<dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics>>,
+}
+
+struct StoredComputePass {
+    cb: Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable>>,
+}
+
+enum GraphPass {
+    Render(StoredSubpass),
+    Compute(StoredComputePass),
 }
 
 impl RenderGraph {
@@ -38,7 +47,7 @@ impl RenderGraph {
         Self {
             alloc: TransientAllocator::new(ctx),
             ring,
-            subpasses: Vec::new(),
+            passes: Vec::new(),
             cached_render_passes: Vec::new(),
             cached_begins: Vec::new(),
         }
@@ -59,12 +68,20 @@ impl RenderGraph {
     where
         F: FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics> + 'static,
     {
-        self.subpasses.push(StoredSubpass {
+        self.passes.push(GraphPass::Render(StoredSubpass {
             info: info.clone(),
             cb: Box::new(cb),
-        });
+        }));
         self.cached_render_passes.clear();
         self.cached_begins.clear();
+    }
+
+    pub fn add_compute_pass<F>(&mut self, cb: F)
+    where
+        F: FnMut(CommandStream<Recording>) -> CommandStream<Executable> + 'static,
+    {
+        self.passes
+            .push(GraphPass::Compute(StoredComputePass { cb: Box::new(cb) }));
     }
 
     pub fn render_pass_handle(&mut self) -> Option<Handle<RenderPass>> {
@@ -80,14 +97,18 @@ impl RenderGraph {
             ));
         }
 
-        if self.subpasses.is_empty() {
+        if self.passes.is_empty() {
             return None;
         }
 
         self.cached_render_passes.clear();
         self.cached_begins.clear();
 
-        for subpass in &self.subpasses {
+        for pass in &self.passes {
+            let GraphPass::Render(subpass) = pass else {
+                continue;
+            };
+
             let mut colors = Vec::new();
             for _attachment in subpass.info.color_attachments.iter().flatten().take(4) {
                 let mut desc = AttachmentDescription::default();
@@ -154,15 +175,29 @@ impl RenderGraph {
             return;
         };
 
+        let mut begin_iter = begin_entries.iter();
+
         self.ring
             .record(|cmd| {
-                let mut stream = CommandStream::new().begin();
-                for (subpass, begin) in self.subpasses.iter_mut().zip(begin_entries.iter()) {
-                    let mut subpass_stream = stream.begin_render_pass(begin);
-                    subpass_stream = (subpass.cb)(subpass_stream);
-                    stream = subpass_stream.stop_drawing();
+                for pass in self.passes.iter_mut() {
+                    match pass {
+                        GraphPass::Render(subpass) => {
+                            let begin = begin_iter
+                                .next()
+                                .expect("begin entry should exist for every render pass");
+                            let mut stream = CommandStream::new().begin();
+                            let mut subpass_stream = stream.begin_render_pass(begin);
+                            subpass_stream = (subpass.cb)(subpass_stream);
+                            stream = subpass_stream.stop_drawing();
+                            stream.end().append(cmd);
+                        }
+                        GraphPass::Compute(compute) => {
+                            let stream = CommandStream::new().begin();
+                            let stream = (compute.cb)(stream);
+                            stream.append(cmd);
+                        }
+                    }
                 }
-                stream.end().append(cmd);
             })
             .expect("Failed to record render graph commands");
 
@@ -172,7 +207,7 @@ impl RenderGraph {
 
         // Advance transient allocator
         self.alloc.advance();
-        self.subpasses.clear();
+        self.passes.clear();
         self.cached_render_passes.clear();
         self.cached_begins.clear();
     }
