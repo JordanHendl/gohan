@@ -17,8 +17,8 @@ pub struct RenderGraph {
     alloc: TransientAllocator,
     ring: CommandRing,
     subpasses: Vec<StoredSubpass>,
-    cached_render_pass: Option<Handle<RenderPass>>,
-    cached_begin: Option<BeginRenderPass>,
+    cached_render_passes: Vec<Handle<RenderPass>>,
+    cached_begins: Vec<BeginRenderPass>,
 }
 
 struct StoredSubpass {
@@ -39,8 +39,8 @@ impl RenderGraph {
             alloc: TransientAllocator::new(ctx),
             ring,
             subpasses: Vec::new(),
-            cached_render_pass: None,
-            cached_begin: None,
+            cached_render_passes: Vec::new(),
+            cached_begins: Vec::new(),
         }
     }
 
@@ -63,25 +63,29 @@ impl RenderGraph {
             info: info.clone(),
             cb: Box::new(cb),
         });
-        self.cached_render_pass = None;
-        self.cached_begin = None;
+        self.cached_render_passes.clear();
+        self.cached_begins.clear();
     }
 
     pub fn render_pass_handle(&mut self) -> Option<Handle<RenderPass>> {
-        self.solve_and_cache().map(|(rp, _)| rp)
+        self.solve_and_cache()
+            .and_then(|(rps, _)| rps.into_iter().next())
     }
 
-    fn solve_and_cache(&mut self) -> Option<(Handle<RenderPass>, BeginRenderPass)> {
-        if let (Some(rp), Some(begin)) = (self.cached_render_pass, self.cached_begin) {
-            return Some((rp, begin));
+    fn solve_and_cache(&mut self) -> Option<(Vec<Handle<RenderPass>>, Vec<BeginRenderPass>)> {
+        if !(self.cached_render_passes.is_empty() || self.cached_begins.is_empty()) {
+            return Some((
+                self.cached_render_passes.clone(),
+                self.cached_begins.clone(),
+            ));
         }
 
         if self.subpasses.is_empty() {
             return None;
         }
 
-        let mut color_storage: Vec<Vec<AttachmentDescription>> = Vec::new();
-        let mut depth_storage: Vec<Option<AttachmentDescription>> = Vec::new();
+        self.cached_render_passes.clear();
+        self.cached_begins.clear();
 
         for subpass in &self.subpasses {
             let mut colors = Vec::new();
@@ -104,78 +108,60 @@ impl RenderGraph {
                 desc
             });
 
-            color_storage.push(colors);
-            depth_storage.push(depth_desc);
-        }
-
-        let subpass_descriptions: Vec<SubpassDescription<'_>> = color_storage
-            .iter()
-            .zip(depth_storage.iter())
-            .map(|(colors, depth)| SubpassDescription {
+            let subpass_description = SubpassDescription {
                 color_attachments: colors.as_slice(),
-                depth_stencil_attachment: depth.as_ref(),
+                depth_stencil_attachment: depth_desc.as_ref(),
                 subpass_dependencies: &[],
-            })
-            .collect();
+            };
 
-        let viewport = self
-            .subpasses
-            .first()
-            .map(|sp| sp.info.viewport)
-            .unwrap_or_default();
+            let rp_info = RenderPassInfo {
+                debug_name: "tare-render-graph-pass",
+                viewport: subpass.info.viewport,
+                subpasses: std::slice::from_ref(&subpass_description),
+            };
 
-        let rp_info = RenderPassInfo {
-            debug_name: "tare-render-graph-pass",
-            viewport,
-            subpasses: &subpass_descriptions,
-        };
+            let render_pass = self.alloc.make_render_pass(&rp_info);
 
-        let render_pass = self.alloc.make_render_pass(&rp_info);
+            let mut begin = BeginRenderPass {
+                viewport: subpass.info.viewport,
+                render_pass,
+                color_attachments: [None; 4],
+                depth_attachment: subpass.info.depth_attachment,
+                clear_values: [None; 4],
+            };
 
-        let mut begin = BeginRenderPass {
-            viewport,
-            render_pass,
-            color_attachments: [None; 4],
-            depth_attachment: None,
-            clear_values: [None; 4],
-        };
+            for i in 0..4 {
+                begin.color_attachments[i] = subpass.info.color_attachments[i];
+                begin.clear_values[i] = subpass.info.clear_values[i];
+            }
 
-        let first = &self.subpasses[0].info;
-        begin.depth_attachment = first.depth_attachment;
-        for i in 0..4 {
-            begin.color_attachments[i] = first.color_attachments[i];
-            begin.clear_values[i] = first.clear_values[i];
+            self.cached_render_passes.push(render_pass);
+            self.cached_begins.push(begin);
         }
 
-        self.cached_render_pass = Some(render_pass);
-        self.cached_begin = Some(begin);
-
-        Some((render_pass, begin))
+        Some((
+            self.cached_render_passes.clone(),
+            self.cached_begins.clone(),
+        ))
     }
-    
+
     pub fn execute(&mut self) {
         self.execute_with(&Default::default());
     }
 
     pub fn execute_with(&mut self, info: &SubmitInfo) {
-        let Some((_render_pass, begin)) = self.solve_and_cache() else {
+        let Some((_, begin_entries)) = self.solve_and_cache() else {
             return;
         };
 
         self.ring
             .record(|cmd| {
                 let mut stream = CommandStream::new().begin();
-                let mut subpass_stream = stream.begin_render_pass(&begin);
-                let subpass_count = self.subpasses.len();
-
-                for (idx, subpass) in self.subpasses.iter_mut().enumerate() {
+                for (subpass, begin) in self.subpasses.iter_mut().zip(begin_entries.iter()) {
+                    let mut subpass_stream = stream.begin_render_pass(begin);
                     subpass_stream = (subpass.cb)(subpass_stream);
-                    if idx + 1 < subpass_count {
-                        subpass_stream.next_subpass();
-                    }
+                    stream = subpass_stream.stop_drawing();
                 }
-
-                stream = subpass_stream.stop_drawing();
                 stream.end().append(cmd);
             })
             .expect("Failed to record render graph commands");
@@ -187,7 +173,7 @@ impl RenderGraph {
         // Advance transient allocator
         self.alloc.advance();
         self.subpasses.clear();
-        self.cached_render_pass = None;
-        self.cached_begin = None;
+        self.cached_render_passes.clear();
+        self.cached_begins.clear();
     }
 }
