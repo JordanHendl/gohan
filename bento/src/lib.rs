@@ -1,4 +1,5 @@
 pub mod error;
+pub mod builder;
 use std::{collections::HashMap, fs, path::Path};
 
 use regex::Regex;
