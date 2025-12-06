@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ptr::NonNull};
+use std::{collections::{HashMap, HashSet}, ptr::NonNull};
 
 use dashi::{
     BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindTable, BindTableInfo,
@@ -208,39 +208,27 @@ impl GraphicsPipelineBuilder {
         let mut table_bindings = HashMap::new();
 
         for set in 0..4u32 {
-            let mut shader_vars_storage: Vec<(dashi::ShaderType, Vec<dashi::BindGroupVariable>)> =
-                Vec::new();
+            let mut combined_vars: HashMap<u32, dashi::BindGroupVariable> = HashMap::new();
 
-            let collect_vars = |stage: &CompilationResult, set: u32| -> Vec<dashi::BindGroupVariable> {
-                stage
-                    .variables
-                    .iter()
-                    .filter(|var| var.set == set)
-                    .map(|var| var.kind.clone())
-                    .collect()
-            };
+            for var in vertex.variables.iter().chain(fragment.variables.iter()) {
+                if var.set != set {
+                    continue;
+                }
 
-            let vertex_vars = collect_vars(&vertex, set);
-            if !vertex_vars.is_empty() {
-                shader_vars_storage.push((vertex.stage, vertex_vars));
+                combined_vars.entry(var.kind.binding).or_insert_with(|| var.kind.clone());
             }
 
-            let fragment_vars = collect_vars(&fragment, set);
-            if !fragment_vars.is_empty() {
-                shader_vars_storage.push((fragment.stage, fragment_vars));
-            }
-
-            let shader_infos: Vec<ShaderInfo> = shader_vars_storage
-                .iter()
-                .map(|(stage, vars)| ShaderInfo {
-                    shader_type: *stage,
-                    variables: vars.as_slice(),
-                })
-                .collect();
-
-            if shader_infos.is_empty() {
+            if combined_vars.is_empty() {
                 continue;
             }
+
+            let mut merged_vars: Vec<dashi::BindGroupVariable> = combined_vars.into_values().collect();
+            merged_vars.sort_by_key(|var| var.binding);
+
+            let shader_infos = [ShaderInfo {
+                shader_type: dashi::ShaderType::All,
+                variables: merged_vars.as_slice(),
+            }];
 
             let layout = ctx
                 .make_bind_table_layout(&BindTableLayoutInfo {
@@ -256,16 +244,19 @@ impl GraphicsPipelineBuilder {
             // Create bind table with any provided resources.
             let mut indexed_bindings: Vec<IndexedBindingInfo> = Vec::new();
             let mut pending_names = Vec::new();
+            let mut bound_indices = HashSet::new();
             for var in vertex.variables.iter().chain(fragment.variables.iter()) {
                 if var.set != set {
                     continue;
                 }
 
                 if let Some(resource) = table_variables.get(&var.name) {
-                    indexed_bindings.push(IndexedBindingInfo {
-                        resources: std::slice::from_ref(resource),
-                        binding: var.kind.binding,
-                    });
+                    if bound_indices.insert(var.kind.binding) {
+                        indexed_bindings.push(IndexedBindingInfo {
+                            resources: std::slice::from_ref(resource),
+                            binding: var.kind.binding,
+                        });
+                    }
                     pending_names.push((var.name.clone(), var.kind.binding));
                 }
             }
