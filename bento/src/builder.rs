@@ -11,6 +11,14 @@ use dashi::{
 
 use crate::CompilationResult;
 
+fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::ShaderType {
+    if lhs == rhs {
+        lhs
+    } else {
+        dashi::ShaderType::All
+    }
+}
+
 pub struct PSO {
     pub layout: Handle<GraphicsPipelineLayout>,
     pub handle: Handle<GraphicsPipeline>,
@@ -129,35 +137,65 @@ impl GraphicsPipelineBuilder {
         let mut bind_groups = Vec::new();
 
         for set in 0..4u32 {
-            let mut shader_vars_storage: Vec<(dashi::ShaderType, Vec<dashi::BindGroupVariable>)> =
-                Vec::new();
+            let mut merged_vars: HashMap<String, (dashi::BindGroupVariable, dashi::ShaderType)> =
+                HashMap::new();
 
-            let collect_vars = |stage: &CompilationResult, set: u32| -> Vec<dashi::BindGroupVariable> {
-                stage
-                    .variables
-                    .iter()
-                    .filter(|var| var.set == set)
-                    .map(|var| var.kind.clone())
-                    .collect()
+            let mut collect_vars = |stage: &CompilationResult, shader_stage: dashi::ShaderType| {
+                for var in stage.variables.iter().filter(|var| var.set == set) {
+                    merged_vars
+                        .entry(var.name.clone())
+                        .and_modify(|(_existing, stage_flags)| {
+                            *stage_flags = merge_stage_flags(*stage_flags, shader_stage);
+                        })
+                        .or_insert((var.kind.clone(), shader_stage));
+                }
             };
 
-            let vertex_vars = collect_vars(&vertex, set);
+            collect_vars(&vertex, vertex.stage);
+            collect_vars(&fragment, fragment.stage);
+
+            if merged_vars.is_empty() {
+                continue;
+            }
+
+            let mut merged_vars: Vec<(String, (dashi::BindGroupVariable, dashi::ShaderType))> =
+                merged_vars.into_iter().collect();
+            merged_vars.sort_by_key(|(_, (var, _))| var.binding);
+
+            let mut vertex_vars = Vec::new();
+            let mut fragment_vars = Vec::new();
+            let mut shared_vars = Vec::new();
+
+            for (_, (var, stage)) in merged_vars.iter() {
+                match stage {
+                    dashi::ShaderType::Vertex => vertex_vars.push(var.clone()),
+                    dashi::ShaderType::Fragment => fragment_vars.push(var.clone()),
+                    dashi::ShaderType::All => shared_vars.push(var.clone()),
+                    _ => {}
+                }
+            }
+
+            let mut shader_infos: Vec<ShaderInfo> = Vec::new();
             if !vertex_vars.is_empty() {
-                shader_vars_storage.push((vertex.stage, vertex_vars));
+                shader_infos.push(ShaderInfo {
+                    shader_type: dashi::ShaderType::Vertex,
+                    variables: vertex_vars.as_slice(),
+                });
             }
 
-            let fragment_vars = collect_vars(&fragment, set);
             if !fragment_vars.is_empty() {
-                shader_vars_storage.push((fragment.stage, fragment_vars));
+                shader_infos.push(ShaderInfo {
+                    shader_type: dashi::ShaderType::Fragment,
+                    variables: fragment_vars.as_slice(),
+                });
             }
 
-            let shader_infos: Vec<ShaderInfo> = shader_vars_storage
-                .iter()
-                .map(|(stage, vars)| ShaderInfo {
-                    shader_type: *stage,
-                    variables: vars.as_slice(),
-                })
-                .collect();
+            if !shared_vars.is_empty() {
+                shader_infos.push(ShaderInfo {
+                    shader_type: dashi::ShaderType::All,
+                    variables: shared_vars.as_slice(),
+                });
+            }
 
             if shader_infos.is_empty() {
                 continue;
@@ -176,14 +214,10 @@ impl GraphicsPipelineBuilder {
 
             // Build bind group if resources were provided.
             let mut bindings = Vec::new();
-            for var in vertex.variables.iter().chain(fragment.variables.iter()) {
-                if var.set != set {
-                    continue;
-                }
-
-                if let Some(res) = variables.get(&var.name) {
+            for (name, (var, _)) in merged_vars.iter() {
+                if let Some(res) = variables.get(name) {
                     bindings.push(dashi::BindingInfo {
-                        binding: var.kind.binding,
+                        binding: var.binding,
                         resource: res.clone(),
                     });
                 }
