@@ -19,13 +19,14 @@ fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::S
     }
 }
 
+#[derive(Clone)]
 pub struct PSO {
     pub layout: Handle<GraphicsPipelineLayout>,
     pub handle: Handle<GraphicsPipeline>,
     pub bind_groups: Vec<Handle<BindGroup>>,
     pub bind_table: Vec<Handle<BindTable>>,
+    pub ctx: NonNull<Context>,
     table_bindings: HashMap<String, (Handle<BindTable>, u32)>,
-    ctx: NonNull<Context>,
 }
 
 impl PSO {
@@ -392,13 +393,14 @@ impl GraphicsPipelineBuilder {
 ////////////////////////////////////////////////////////////////////////////
 ///
 
+#[derive(Clone)]
 pub struct CSO {
-    layout: Handle<ComputePipelineLayout>,
-    handle: Handle<ComputePipeline>,
-    bind_groups: Vec<Handle<BindGroup>>,
-    bind_table: Vec<Handle<BindTable>>,
+    pub layout: Handle<ComputePipelineLayout>,
+    pub handle: Handle<ComputePipeline>,
+    pub bind_groups: Vec<Handle<BindGroup>>,
+    pub bind_table: Vec<Handle<BindTable>>,
+    pub ctx: NonNull<Context>,
     table_bindings: HashMap<String, (Handle<BindTable>, u32)>,
-    ctx: NonNull<Context>,
 }
 
 impl CSO {
