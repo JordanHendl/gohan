@@ -1,12 +1,15 @@
-use std::{collections::{HashMap, HashSet}, ptr::NonNull};
+use std::{
+    collections::{HashMap, HashSet},
+    ptr::NonNull,
+};
 
 use dashi::{
     BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindTable, BindTableInfo,
-    BindTableLayout, BindTableLayoutInfo, ComputePipeline, ComputePipelineInfo, ComputePipelineLayout,
-    ComputePipelineLayoutInfo, Context, GraphicsPipeline, GraphicsPipelineDetails,
-    GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle,
-    IndexedBindingInfo, IndexedResource, PipelineShaderInfo, ShaderInfo, ShaderResource,
-    VertexDescriptionInfo, VertexEntryInfo,
+    BindTableLayout, BindTableLayoutInfo, ComputePipeline, ComputePipelineInfo,
+    ComputePipelineLayout, ComputePipelineLayoutInfo, Context, GraphicsPipeline,
+    GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout,
+    GraphicsPipelineLayoutInfo, Handle, IndexedBindingInfo, IndexedResource, PipelineShaderInfo,
+    ShaderInfo, ShaderResource, VertexDescriptionInfo, VertexEntryInfo,
 };
 
 use crate::CompilationResult;
@@ -41,7 +44,10 @@ impl PSO {
             // created with. Callers are responsible for ensuring the context
             // remains valid for the lifetime of the PSO.
             let ctx = unsafe { self.ctx.as_mut() };
-            let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo { table, bindings: &bindings });
+            let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo {
+                table,
+                bindings: &bindings,
+            });
         }
     }
 }
@@ -68,7 +74,10 @@ impl GraphicsPipelineBuilder {
     pub fn vertex(self, shader: Option<&[u8]>) -> Self {
         if let Some(bytes) = shader {
             if let Ok(result) = CompilationResult::from_bytes(bytes) {
-                return Self { vertex: Some(result), ..self };
+                return Self {
+                    vertex: Some(result),
+                    ..self
+                };
             }
         }
 
@@ -77,7 +86,10 @@ impl GraphicsPipelineBuilder {
 
     pub fn vertex_compiled(self, shader: Option<CompilationResult>) -> Self {
         if let Some(compiled) = shader {
-            return Self { vertex: Some(compiled), ..self };
+            return Self {
+                vertex: Some(compiled),
+                ..self
+            };
         }
 
         self
@@ -86,7 +98,10 @@ impl GraphicsPipelineBuilder {
     pub fn fragment(self, shader: Option<&[u8]>) -> Self {
         if let Some(bytes) = shader {
             if let Ok(result) = CompilationResult::from_bytes(bytes) {
-                return Self { fragment: Some(result), ..self };
+                return Self {
+                    fragment: Some(result),
+                    ..self
+                };
             }
         }
 
@@ -95,7 +110,10 @@ impl GraphicsPipelineBuilder {
 
     pub fn fragment_compiled(self, shader: Option<CompilationResult>) -> Self {
         if let Some(compiled) = shader {
-            return Self { fragment: Some(compiled), ..self };
+            return Self {
+                fragment: Some(compiled),
+                ..self
+            };
         }
 
         self
@@ -107,7 +125,10 @@ impl GraphicsPipelineBuilder {
         let mut table_variables = self.table_variables;
         table_variables.insert(key.to_string(), variable);
 
-        Self { table_variables, ..self }
+        Self {
+            table_variables,
+            ..self
+        }
     }
 
     pub fn add_variable(self, key: &str, variable: ShaderResource) -> Self {
@@ -138,8 +159,10 @@ impl GraphicsPipelineBuilder {
         let mut bind_groups = Vec::new();
 
         for set in 0..4u32 {
-            let mut merged_vars: HashMap<u32, (dashi::BindGroupVariable, dashi::ShaderType, Vec<String>)> =
-                HashMap::new();
+            let mut merged_vars: HashMap<
+                u32,
+                (dashi::BindGroupVariable, dashi::ShaderType, Vec<String>),
+            > = HashMap::new();
 
             let mut collect_vars = |stage: &CompilationResult, shader_stage: dashi::ShaderType| {
                 for var in stage.variables.iter().filter(|var| var.set == set) {
@@ -163,8 +186,10 @@ impl GraphicsPipelineBuilder {
                 continue;
             }
 
-            let mut merged_vars: Vec<(u32, (dashi::BindGroupVariable, dashi::ShaderType, Vec<String>))> =
-                merged_vars.into_iter().collect();
+            let mut merged_vars: Vec<(
+                u32,
+                (dashi::BindGroupVariable, dashi::ShaderType, Vec<String>),
+            )> = merged_vars.into_iter().collect();
             merged_vars.sort_by_key(|(_, (var, _, _))| var.binding);
 
             let mut vertex_vars = Vec::new();
@@ -254,14 +279,17 @@ impl GraphicsPipelineBuilder {
                     continue;
                 }
 
-                combined_vars.entry(var.kind.binding).or_insert_with(|| var.kind.clone());
+                combined_vars
+                    .entry(var.kind.binding)
+                    .or_insert_with(|| var.kind.clone());
             }
 
             if combined_vars.is_empty() {
                 continue;
             }
 
-            let mut merged_vars: Vec<dashi::BindGroupVariable> = combined_vars.into_values().collect();
+            let mut merged_vars: Vec<dashi::BindGroupVariable> =
+                combined_vars.into_values().collect();
             merged_vars.sort_by_key(|var| var.binding);
 
             let shader_infos = [ShaderInfo {
@@ -348,7 +376,12 @@ impl GraphicsPipelineBuilder {
 
         let vertex_info = VertexDescriptionInfo {
             entries: vertex_entries.as_slice(),
-            stride: vertex.metadata.vertex.as_ref().map(|v| v.stride).unwrap_or_default(),
+            stride: vertex
+                .metadata
+                .vertex
+                .as_ref()
+                .map(|v| v.stride)
+                .unwrap_or_default(),
             rate: vertex
                 .metadata
                 .vertex
@@ -412,8 +445,29 @@ impl CSO {
             }];
 
             let ctx = unsafe { self.ctx.as_mut() };
-            let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo { table, bindings: &bindings });
+            let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo {
+                table,
+                bindings: &bindings,
+            });
         }
+    }
+
+    pub fn bindings(&self) -> [Option<Handle<BindGroup>>; 4] {
+        let mut out: [Option<Handle<BindGroup>>; 4] = [None; 4];
+        for (i, x) in self.bind_groups.iter().take(4).enumerate() {
+            out[i] = Some(*x);
+        }
+
+        out
+    }
+
+    pub fn tables(&self) -> [Option<Handle<BindTable>>; 4] {
+        let mut out: [Option<Handle<BindTable>>; 4] = [None; 4];
+        for (i, x) in self.bind_table.iter().take(4).enumerate() {
+            out[i] = Some(*x);
+        }
+
+        out
     }
 }
 pub struct ComputePipelineBuilder {
@@ -434,7 +488,10 @@ impl ComputePipelineBuilder {
     pub fn shader(self, shader: Option<&[u8]>) -> Self {
         if let Some(bytes) = shader {
             if let Ok(result) = CompilationResult::from_bytes(bytes) {
-                return Self { shader: Some(result), ..self };
+                return Self {
+                    shader: Some(result),
+                    ..self
+                };
             }
         }
 
@@ -443,7 +500,10 @@ impl ComputePipelineBuilder {
 
     pub fn shader_compiled(self, shader: Option<CompilationResult>) -> Self {
         if let Some(shader) = shader {
-            return Self { shader: Some(shader), ..self };
+            return Self {
+                shader: Some(shader),
+                ..self
+            };
         }
 
         self
@@ -455,7 +515,10 @@ impl ComputePipelineBuilder {
         let mut table_variables = self.table_variables;
         table_variables.insert(key.to_string(), variable);
 
-        Self { table_variables, ..self }
+        Self {
+            table_variables,
+            ..self
+        }
     }
 
     // Adds a variable to this builder. The variable name is used to match the binding up with the
