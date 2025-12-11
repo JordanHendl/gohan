@@ -452,6 +452,22 @@ impl CSO {
         }
     }
 
+    pub fn update_table_slice(&mut self, key: &str, resources: &[IndexedResource]) {
+        if let Some((table, binding)) = self.table_bindings.get(key).copied() {
+            let bindings = [IndexedBindingInfo {
+                resources,
+                binding,
+            }];
+
+            let ctx = unsafe { self.ctx.as_mut() };
+            let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo {
+                table,
+                bindings: &bindings,
+            });
+        }
+    }
+
+
     pub fn bindings(&self) -> [Option<Handle<BindGroup>>; 4] {
         let mut out: [Option<Handle<BindGroup>>; 4] = [None; 4];
         for (i, x) in self.bind_groups.iter().take(4).enumerate() {
