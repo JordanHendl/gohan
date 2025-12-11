@@ -4,12 +4,13 @@ use std::{
 };
 
 use dashi::{
-    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindTable, BindTableInfo,
-    BindTableLayout, BindTableLayoutInfo, ComputePipeline, ComputePipelineInfo,
-    ComputePipelineLayout, ComputePipelineLayoutInfo, Context, GraphicsPipeline,
-    GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout,
-    GraphicsPipelineLayoutInfo, Handle, IndexedBindingInfo, IndexedResource, PipelineShaderInfo,
-    ShaderInfo, ShaderResource, VertexDescriptionInfo, VertexEntryInfo,
+    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindGroupVariableType,
+    BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BufferInfo, BufferUsage,
+    ComputePipeline, ComputePipelineInfo, ComputePipelineLayout, ComputePipelineLayoutInfo,
+    Context, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo,
+    GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView,
+    IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo, SampleCount,
+    SamplerInfo, ShaderInfo, ShaderResource, VertexDescriptionInfo, VertexEntryInfo,
 };
 
 use crate::CompilationResult;
@@ -22,6 +23,162 @@ fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::S
     }
 }
 
+struct DefaultResources {
+    uniform: Option<ShaderResource>,
+    storage: Option<ShaderResource>,
+    sampled_image: Option<ShaderResource>,
+    storage_image: Option<ShaderResource>,
+}
+
+impl Default for DefaultResources {
+    fn default() -> Self {
+        Self {
+            uniform: None,
+            storage: None,
+            sampled_image: None,
+            storage_image: None,
+        }
+    }
+}
+
+impl DefaultResources {
+    fn make_uniform(ctx: &mut dashi::Context) -> Option<ShaderResource> {
+        let buffer = ctx
+            .make_buffer(&BufferInfo {
+                debug_name: "bento_default_uniform",
+                byte_size: 256,
+                visibility: MemoryVisibility::CpuAndGpu,
+                usage: BufferUsage::UNIFORM,
+                initial_data: None,
+            })
+            .ok()?;
+
+        Some(ShaderResource::Buffer(buffer))
+    }
+
+    fn make_storage(ctx: &mut dashi::Context) -> Option<ShaderResource> {
+        let buffer = ctx
+            .make_buffer(&BufferInfo {
+                debug_name: "bento_default_storage",
+                byte_size: 256,
+                visibility: MemoryVisibility::CpuAndGpu,
+                usage: BufferUsage::STORAGE,
+                initial_data: None,
+            })
+            .ok()?;
+
+        Some(ShaderResource::StorageBuffer(buffer))
+    }
+
+    fn make_sampled_image(ctx: &mut dashi::Context) -> Option<ShaderResource> {
+        const BLACK_PIXEL: [u8; 4] = [0, 0, 0, 0];
+
+        let image = ctx
+            .make_image(&ImageInfo {
+                debug_name: "bento_default_image",
+                dim: [1, 1, 1],
+                layers: 1,
+                format: Format::RGBA8,
+                mip_levels: 1,
+                samples: SampleCount::S1,
+                initial_data: Some(&BLACK_PIXEL),
+            })
+            .ok()?;
+
+        let sampler = ctx.make_sampler(&SamplerInfo::default()).ok()?;
+        let view = ImageView {
+            img: image,
+            ..Default::default()
+        };
+
+        Some(ShaderResource::SampledImage(view, sampler))
+    }
+
+    fn get(
+        &mut self,
+        ctx: &mut dashi::Context,
+        var_type: BindGroupVariableType,
+    ) -> Option<ShaderResource> {
+        match var_type {
+            BindGroupVariableType::Uniform | BindGroupVariableType::DynamicUniform => {
+                if self.uniform.is_none() {
+                    self.uniform = Self::make_uniform(ctx);
+                }
+
+                self.uniform.clone()
+            }
+            BindGroupVariableType::Storage | BindGroupVariableType::DynamicStorage => {
+                if self.storage.is_none() {
+                    self.storage = Self::make_storage(ctx);
+                }
+
+                self.storage.clone()
+            }
+            BindGroupVariableType::SampledImage => {
+                if self.sampled_image.is_none() {
+                    self.sampled_image = Self::make_sampled_image(ctx);
+                }
+
+                self.sampled_image.clone()
+            }
+            BindGroupVariableType::StorageImage => {
+                if self.storage_image.is_none() {
+                    self.storage_image = Self::make_sampled_image(ctx);
+                }
+
+                self.storage_image.clone()
+            }
+        }
+    }
+}
+
+fn default_resources_for_variable(
+    defaults: &mut DefaultResources,
+    ctx: &mut dashi::Context,
+    var: &dashi::BindGroupVariable,
+    size: u32,
+) -> Option<Vec<IndexedResource>> {
+    let default_resource = defaults.get(ctx, var.var_type)?;
+
+    let mut defaults = Vec::with_capacity(size as usize);
+    for slot in 0..size {
+        defaults.push(IndexedResource {
+            resource: default_resource.clone(),
+            slot,
+        });
+    }
+
+    Some(defaults)
+}
+
+fn resources_from_config(
+    defaults: &mut DefaultResources,
+    ctx: &mut dashi::Context,
+    var: &dashi::BindGroupVariable,
+    config: &BindTableVariable,
+) -> Option<(Vec<IndexedResource>, u32)> {
+    match config {
+        BindTableVariable::Empty { size } => {
+            let defaults = default_resources_for_variable(defaults, ctx, var, *size)?;
+            Some((defaults, *size))
+        }
+        BindTableVariable::WithResources { resources } => {
+            if resources.is_empty() {
+                return None;
+            }
+
+            let size = resources
+                .iter()
+                .map(|res| res.slot + 1)
+                .max()
+                .unwrap_or(resources.len() as u32)
+                .max(resources.len() as u32);
+
+            Some((resources.clone(), size))
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct PSO {
     pub layout: Handle<GraphicsPipelineLayout>,
@@ -29,34 +186,60 @@ pub struct PSO {
     pub bind_groups: Vec<Handle<BindGroup>>,
     pub bind_table: Vec<Handle<BindTable>>,
     pub ctx: NonNull<Context>,
-    table_bindings: HashMap<String, (Handle<BindTable>, u32)>,
+    table_bindings: HashMap<String, TableBinding>,
 }
 
 impl PSO {
     pub fn update_table(&mut self, key: &str, resource: IndexedResource) {
-        if let Some((table, binding)) = self.table_bindings.get(key).copied() {
-            let bindings = [IndexedBindingInfo {
-                resources: std::slice::from_ref(&resource),
-                binding,
-            }];
-
-            // Safety: The PSO stores a NonNull pointer to the context it was
-            // created with. Callers are responsible for ensuring the context
-            // remains valid for the lifetime of the PSO.
-            let ctx = unsafe { self.ctx.as_mut() };
-            let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo {
-                table,
-                bindings: &bindings,
-            });
-        }
+        self.update_table_slice(key, std::slice::from_ref(&resource));
     }
+
+    pub fn update_table_slice(&mut self, key: &str, resources: &[IndexedResource]) {
+        let Some(binding_info) = self.table_bindings.get(key).copied() else {
+            return;
+        };
+
+        if resources
+            .iter()
+            .any(|resource| resource.slot >= binding_info.size)
+        {
+            return;
+        }
+
+        let bindings = [IndexedBindingInfo {
+            resources,
+            binding: binding_info.binding,
+        }];
+
+        // Safety: The PSO stores a NonNull pointer to the context it was
+        // created with. Callers are responsible for ensuring the context
+        // remains valid for the lifetime of the PSO.
+        let ctx = unsafe { self.ctx.as_mut() };
+        let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo {
+            table: binding_info.table,
+            bindings: &bindings,
+        });
+    }
+}
+
+#[derive(Clone, Copy)]
+struct TableBinding {
+    table: Handle<BindTable>,
+    binding: u32,
+    size: u32,
+}
+
+#[derive(Clone)]
+pub enum BindTableVariable {
+    Empty { size: u32 },
+    WithResources { resources: Vec<IndexedResource> },
 }
 
 pub struct GraphicsPipelineBuilder {
     vertex: Option<CompilationResult>,
     fragment: Option<CompilationResult>,
     variables: HashMap<String, ShaderResource>,
-    table_variables: HashMap<String, IndexedResource>,
+    table_variables: HashMap<String, BindTableVariable>,
     details: GraphicsPipelineDetails,
 }
 
@@ -121,9 +304,26 @@ impl GraphicsPipelineBuilder {
 
     // Adds a variable to this builder. The variable name is used to match the binding up with the
     // shader source bindings.
-    pub fn add_table_variable(self, key: &str, variable: IndexedResource) -> Self {
+    pub fn add_table_variable(self, key: &str, size: u32) -> Self {
         let mut table_variables = self.table_variables;
-        table_variables.insert(key.to_string(), variable);
+        table_variables.insert(key.to_string(), BindTableVariable::Empty { size });
+
+        Self {
+            table_variables,
+            ..self
+        }
+    }
+
+    pub fn add_table_variable_with_resources(
+        self,
+        key: &str,
+        resources: Vec<IndexedResource>,
+    ) -> Self {
+        let mut table_variables = self.table_variables;
+        table_variables.insert(
+            key.to_string(),
+            BindTableVariable::WithResources { resources },
+        );
 
         Self {
             table_variables,
@@ -270,6 +470,7 @@ impl GraphicsPipelineBuilder {
         let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None; 4];
         let mut bind_tables = Vec::new();
         let mut table_bindings = HashMap::new();
+        let mut defaults = DefaultResources::default();
 
         for set in 0..4u32 {
             let mut combined_vars: HashMap<u32, dashi::BindGroupVariable> = HashMap::new();
@@ -309,9 +510,10 @@ impl GraphicsPipelineBuilder {
             }
 
             // Create bind table with any provided resources.
-            let mut indexed_bindings: Vec<IndexedBindingInfo> = Vec::new();
+            let mut pending_bindings = Vec::new();
             let mut pending_names = Vec::new();
             let mut bound_indices = HashSet::new();
+            let mut resources: Vec<Vec<IndexedResource>> = Vec::new();
             for var in vertex.variables.iter().chain(fragment.variables.iter()) {
                 if var.set != set {
                     continue;
@@ -319,16 +521,28 @@ impl GraphicsPipelineBuilder {
 
                 if let Some(resource) = table_variables.get(&var.name) {
                     if bound_indices.insert(var.kind.binding) {
-                        indexed_bindings.push(IndexedBindingInfo {
-                            resources: std::slice::from_ref(resource),
-                            binding: var.kind.binding,
-                        });
+                        if let Some((initial_resources, size)) =
+                            resources_from_config(&mut defaults, ctx, &var.kind, resource)
+                        {
+                            resources.push(initial_resources);
+                            let resource_index = resources.len() - 1;
+
+                            pending_bindings.push((var.kind.binding, resource_index));
+                            pending_names.push((var.name.clone(), var.kind.binding, size));
+                        }
                     }
-                    pending_names.push((var.name.clone(), var.kind.binding));
                 }
             }
 
-            if !indexed_bindings.is_empty() {
+            if !pending_bindings.is_empty() {
+                let indexed_bindings: Vec<IndexedBindingInfo> = pending_bindings
+                    .iter()
+                    .map(|(binding, resource_index)| IndexedBindingInfo {
+                        resources: resources[*resource_index].as_slice(),
+                        binding: *binding,
+                    })
+                    .collect();
+
                 let table = ctx
                     .make_bind_table(&BindTableInfo {
                         debug_name: "bento_bind_table",
@@ -337,8 +551,15 @@ impl GraphicsPipelineBuilder {
                         set,
                     })
                     .ok()?;
-                for (name, binding) in pending_names {
-                    table_bindings.insert(name, (table, binding));
+                for (name, binding, size) in pending_names {
+                    table_bindings.insert(
+                        name,
+                        TableBinding {
+                            table,
+                            binding,
+                            size,
+                        },
+                    );
                 }
                 bind_tables.push(table);
             }
@@ -433,23 +654,36 @@ pub struct CSO {
     pub bind_groups: Vec<Handle<BindGroup>>,
     pub bind_table: Vec<Handle<BindTable>>,
     pub ctx: NonNull<Context>,
-    table_bindings: HashMap<String, (Handle<BindTable>, u32)>,
+    table_bindings: HashMap<String, TableBinding>,
 }
 
 impl CSO {
     pub fn update_table(&mut self, key: &str, resource: IndexedResource) {
-        if let Some((table, binding)) = self.table_bindings.get(key).copied() {
-            let bindings = [IndexedBindingInfo {
-                resources: std::slice::from_ref(&resource),
-                binding,
-            }];
+        self.update_table_slice(key, std::slice::from_ref(&resource));
+    }
 
-            let ctx = unsafe { self.ctx.as_mut() };
-            let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo {
-                table,
-                bindings: &bindings,
-            });
+    pub fn update_table_slice(&mut self, key: &str, resources: &[IndexedResource]) {
+        let Some(binding_info) = self.table_bindings.get(key).copied() else {
+            return;
+        };
+
+        if resources
+            .iter()
+            .any(|resource| resource.slot >= binding_info.size)
+        {
+            return;
         }
+
+        let bindings = [IndexedBindingInfo {
+            resources,
+            binding: binding_info.binding,
+        }];
+
+        let ctx = unsafe { self.ctx.as_mut() };
+        let _ = ctx.update_bind_table(&dashi::BindTableUpdateInfo {
+            table: binding_info.table,
+            bindings: &bindings,
+        });
     }
 
     pub fn update_table_slice(&mut self, key: &str, resources: &[IndexedResource]) {
@@ -489,7 +723,7 @@ impl CSO {
 pub struct ComputePipelineBuilder {
     shader: Option<CompilationResult>,
     variables: HashMap<String, ShaderResource>,
-    table_variables: HashMap<String, IndexedResource>,
+    table_variables: HashMap<String, BindTableVariable>,
 }
 
 impl ComputePipelineBuilder {
@@ -527,9 +761,26 @@ impl ComputePipelineBuilder {
 
     // Adds a bind table variable to this builder. The variable name is used to match the binding up with the
     // shader source bindings.
-    pub fn add_table_variable(self, key: &str, variable: IndexedResource) -> Self {
+    pub fn add_table_variable(self, key: &str, size: u32) -> Self {
         let mut table_variables = self.table_variables;
-        table_variables.insert(key.to_string(), variable);
+        table_variables.insert(key.to_string(), BindTableVariable::Empty { size });
+
+        Self {
+            table_variables,
+            ..self
+        }
+    }
+
+    pub fn add_table_variable_with_resources(
+        self,
+        key: &str,
+        resources: Vec<IndexedResource>,
+    ) -> Self {
+        let mut table_variables = self.table_variables;
+        table_variables.insert(
+            key.to_string(),
+            BindTableVariable::WithResources { resources },
+        );
 
         Self {
             table_variables,
@@ -617,6 +868,7 @@ impl ComputePipelineBuilder {
         let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None; 4];
         let mut bind_tables = Vec::new();
         let mut table_bindings = HashMap::new();
+        let mut defaults = DefaultResources::default();
 
         for set in 0..4u32 {
             let vars: Vec<dashi::BindGroupVariable> = shader
@@ -646,23 +898,36 @@ impl ComputePipelineBuilder {
                 bt_layouts[set as usize] = Some(layout);
             }
 
-            let mut indexed_bindings = Vec::new();
+            let mut pending_bindings = Vec::new();
             let mut pending_names = Vec::new();
+            let mut resources: Vec<Vec<IndexedResource>> = Vec::new();
             for var in shader.variables.iter() {
                 if var.set != set {
                     continue;
                 }
 
                 if let Some(res) = table_variables.get(&var.name) {
-                    indexed_bindings.push(IndexedBindingInfo {
-                        resources: std::slice::from_ref(res),
-                        binding: var.kind.binding,
-                    });
-                    pending_names.push((var.name.clone(), var.kind.binding));
+                    if let Some((initial_resources, size)) =
+                        resources_from_config(&mut defaults, ctx, &var.kind, res)
+                    {
+                        resources.push(initial_resources);
+                        let resource_index = resources.len() - 1;
+
+                        pending_bindings.push((var.kind.binding, resource_index));
+                        pending_names.push((var.name.clone(), var.kind.binding, size));
+                    }
                 }
             }
 
-            if !indexed_bindings.is_empty() {
+            if !pending_bindings.is_empty() {
+                let indexed_bindings: Vec<IndexedBindingInfo> = pending_bindings
+                    .iter()
+                    .map(|(binding, resource_index)| IndexedBindingInfo {
+                        resources: resources[*resource_index].as_slice(),
+                        binding: *binding,
+                    })
+                    .collect();
+
                 let table = ctx
                     .make_bind_table(&BindTableInfo {
                         debug_name: "bento_compute_bind_table",
@@ -671,8 +936,15 @@ impl ComputePipelineBuilder {
                         set,
                     })
                     .ok()?;
-                for (name, binding) in pending_names {
-                    table_bindings.insert(name, (table, binding));
+                for (name, binding, size) in pending_names {
+                    table_bindings.insert(
+                        name,
+                        TableBinding {
+                            table,
+                            binding,
+                            size,
+                        },
+                    );
                 }
                 bind_tables.push(table);
             }

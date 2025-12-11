@@ -251,26 +251,10 @@ fn builds_compute_pipeline_with_resources_and_table_updates() {
         })
         .expect("uniform buffer");
 
-    let storage = ctx
-        .make_buffer(&BufferInfo {
-            debug_name: "data",
-            byte_size: 16,
-            visibility: MemoryVisibility::CpuAndGpu,
-            usage: BufferUsage::STORAGE,
-            initial_data: None,
-        })
-        .expect("storage buffer");
-
     let mut pipeline = ComputePipelineBuilder::new()
         .shader_compiled(Some(compute_stage))
         .add_variable("config", ShaderResource::Buffer(uniform))
-        .add_table_variable(
-            "data",
-            IndexedResource {
-                resource: ShaderResource::StorageBuffer(storage),
-                slot: 0,
-            },
-        )
+        .add_table_variable("data", 2)
         .build(&mut ctx)
         .expect("pipeline should build");
 
@@ -290,6 +274,97 @@ fn builds_compute_pipeline_with_resources_and_table_updates() {
             resource: ShaderResource::StorageBuffer(replacement),
             slot: 1,
         },
+    );
+
+    let replacement_second = ctx
+        .make_buffer(&BufferInfo {
+            debug_name: "replacement_second",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("second replacement buffer");
+
+    pipeline.update_table_slice(
+        "data",
+        &[IndexedResource {
+            resource: ShaderResource::StorageBuffer(replacement_second),
+            slot: 0,
+        }],
+    );
+}
+
+#[test]
+#[serial]
+fn builds_compute_pipeline_with_initial_table_resources() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+    let compute_stage = compile_shader(dashi::ShaderType::Compute, BUFFERED_COMPUTE);
+
+    let uniform = ctx
+        .make_buffer(&BufferInfo {
+            debug_name: "config",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::UNIFORM,
+            initial_data: None,
+        })
+        .expect("uniform buffer");
+
+    let first_storage = ctx
+        .make_buffer(&BufferInfo {
+            debug_name: "table_entry_0",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("first storage buffer");
+
+    let second_storage = ctx
+        .make_buffer(&BufferInfo {
+            debug_name: "table_entry_1",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("second storage buffer");
+
+    let initial_resources = vec![
+        IndexedResource {
+            resource: ShaderResource::StorageBuffer(first_storage),
+            slot: 0,
+        },
+        IndexedResource {
+            resource: ShaderResource::StorageBuffer(second_storage),
+            slot: 1,
+        },
+    ];
+
+    let replacement = ctx
+        .make_buffer(&BufferInfo {
+            debug_name: "replacement_initial_table",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("replacement buffer");
+
+    let mut pipeline = ComputePipelineBuilder::new()
+        .shader_compiled(Some(compute_stage))
+        .add_variable("config", ShaderResource::Buffer(uniform))
+        .add_table_variable_with_resources("data", initial_resources)
+        .build(&mut ctx)
+        .expect("pipeline should build with initial resources");
+
+    pipeline.update_table_slice(
+        "data",
+        &[IndexedResource {
+            resource: ShaderResource::StorageBuffer(replacement),
+            slot: 1,
+        }],
     );
 }
 
