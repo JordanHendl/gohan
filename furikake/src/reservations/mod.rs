@@ -1,8 +1,8 @@
 pub mod bindless_camera;
+pub mod bindless_lights;
 pub mod bindless_materials;
 pub mod bindless_textures;
 pub mod bindless_transformations;
-pub mod bindless_lights;
 pub mod camera;
 pub mod timing;
 pub use timing::*;
