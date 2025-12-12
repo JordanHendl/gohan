@@ -1,4 +1,5 @@
-use glam::{Mat4, Quat, Vec3};
+use dashi::{Handle, Image, ImageView, Sampler};
+use glam::{Mat4, Quat, Vec3, Vec4};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -67,10 +68,43 @@ pub struct Transformation {
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Texture {
-    pub id: u32,
-    pub width: u32,
-    pub height: u32,
-    pub mip_levels: u32,
+    pub img: ImageView,
+    pub sampler: Option<Handle<Sampler>>,
+}
+
+pub const LIGHT_TYPE_DIRECTIONAL: u32 = 0;
+pub const LIGHT_TYPE_POINT: u32 = 1;
+pub const LIGHT_TYPE_SPOT: u32 = 2;
+pub const LIGHT_TYPE_AREA_RECT: u32 = 3;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct GpuLight {
+    /// xyz = position (world space) for point/spot/area
+    /// xyz = *unused* for directional
+    /// w   = type (LIGHT_TYPE_*)
+    pub position_type: Vec4,
+
+    /// xyz = direction (world space, normalized) for directional/spot/area
+    /// xyz = *unused* for point
+    /// w   = range (point/spot) or max influence distance (area),
+    ///       or 0.0 for “infinite” directional.
+    pub direction_range: Vec4,
+
+    /// rgb = color
+    /// w   = intensity (luminous intensity / radiance scale)
+    pub color_intensity: Vec4,
+
+    /// x = inner cone cos(theta)   (for spot)
+    /// y = outer cone cos(theta)   (for spot)
+    /// z = area half-width         (for area rect)
+    /// w = area half-height        (for area rect)
+    /// or generally “misc packed params”
+    pub spot_area: Vec4,
+
+    /// x = flags (bitmask encoded as u32 bits in f32)
+    /// y,z,w = padding / future use
+    pub extra: Vec4,
 }
 
 #[repr(C)]

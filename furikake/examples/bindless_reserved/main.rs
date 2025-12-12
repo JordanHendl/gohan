@@ -42,9 +42,7 @@ fn compile_shader() -> bento::CompilationResult {
             uint height;
             uint mip_levels;
         };
-        layout(set = 2, binding = 0) buffer Textures {
-            Texture textures[];
-        } meshi_bindless_textures;
+        layout(set = 2, binding = 0) uniform Sampler2D meshi_bindless_textures[]; 
 
         layout(set = 3, binding = 0) buffer Transformations {
             mat4 transforms[];
@@ -130,19 +128,6 @@ fn main() {
         })
         .expect("mutate cameras");
 
-    let mut texture_handle = None;
-    state
-        .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-            let handle = textures.add_texture();
-            let texture = textures.texture_mut(handle);
-            texture.id = 7;
-            texture.width = 2048;
-            texture.height = 1024;
-            texture.mip_levels = 5;
-            texture_handle = Some(handle);
-        })
-        .expect("mutate textures");
-
     let mut transform_handle = None;
     state
         .reserved_mut::<ReservedBindlessTransformations, _>(
@@ -187,7 +172,6 @@ fn main() {
         .expect("unmap timing buffer after read");
 
     let camera_handle = camera_handle.expect("camera handle");
-    let texture_handle = texture_handle.expect("texture handle");
     let transform_handle = transform_handle.expect("transform handle");
     let material_handle = material_handle.expect("material handle");
 
@@ -209,14 +193,6 @@ fn main() {
             "Camera[{}] position: {:?}",
             camera_handle.slot,
             cameras.camera(camera_handle).position
-        );
-        println!(
-            "Texture[{}] -> id {} | {}x{} ({} mips)",
-            texture_handle.slot,
-            textures.texture(texture_handle).id,
-            textures.texture(texture_handle).width,
-            textures.texture(texture_handle).height,
-            textures.texture(texture_handle).mip_levels,
         );
         println!(
             "Transform[{}] translation: {:?}",
@@ -257,14 +233,6 @@ fn main() {
         .expect("tweak camera per-frame");
 
     state
-        .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-            let tex = textures.texture_mut(texture_handle);
-            tex.id = 99;
-            tex.width = 4096;
-        })
-        .expect("mutate texture slot");
-
-    state
         .reserved_mut::<ReservedBindlessTransformations, _>(
             "meshi_bindless_transformations",
             |transforms| {
@@ -278,8 +246,8 @@ fn main() {
     state
         .reserved_mut::<ReservedBindlessMaterials, _>("meshi_bindless_materials", |materials| {
             let material = materials.material_mut(material_handle);
-            material.base_color_texture_id = texture_handle.slot as u16;
-            material.normal_texture_id = texture_handle.slot as u16 + 1;
+            material.base_color_texture_id = 0 as u16;
+            material.normal_texture_id = 0 as u16 + 1;
         })
         .expect("adjust material bindings");
 
@@ -315,14 +283,6 @@ fn main() {
         "Camera[{}] position (mutated): {:?}",
         camera_handle.slot,
         cameras.camera(camera_handle).position
-    );
-    println!(
-        "Texture[{}] -> id {} | {}x{} ({} mips) after runtime swap",
-        texture_handle.slot,
-        textures.texture(texture_handle).id,
-        textures.texture(texture_handle).width,
-        textures.texture(texture_handle).height,
-        textures.texture(texture_handle).mip_levels,
     );
     println!(
         "Transform[{}] translation after runtime edit: {:?}",

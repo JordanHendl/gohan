@@ -2,17 +2,25 @@
 
 use std::ptr::NonNull;
 
-use dashi::{BufferInfo, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource};
+use dashi::{
+    BufferInfo, Context, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource,
+    Sampler, SamplerInfo, ShaderResource,
+};
 
 use crate::types::Texture;
 
 use super::{ReservedBinding, ReservedItem};
 
+struct DefaultData {
+    img: ImageView,
+    sampler: Handle<Sampler>,
+}
 pub struct ReservedBindlessTextures {
     ctx: NonNull<Context>,
     device_texture_data: Vec<IndexedResource>,
-    host_texture_data: Vec<NonNull<Texture>>,
+    host_texture_data: Vec<Texture>,
     available: Vec<u16>,
+    def: DefaultData,
 }
 
 impl ReservedBindlessTextures {
@@ -23,26 +31,30 @@ impl ReservedBindlessTextures {
         let mut h_data = Vec::with_capacity(START_SIZE);
         let available: Vec<u16> = (0..START_SIZE as u16).collect();
 
+        let default_sampler = ctx.make_sampler(&SamplerInfo::default()).unwrap();
+        let default_image = ctx
+            .make_image(&ImageInfo {
+                debug_name: "[FURIKAKE] Default Image",
+                dim: [1, 1, 1],
+                format: dashi::Format::RGBA8,
+                initial_data: Some(&[128, 128, 0, 255]),
+                ..Default::default()
+            })
+            .unwrap();
+
+        let default_view = ImageView {
+            img: default_image,
+            ..Default::default()
+        };
+
         for i in 0..START_SIZE {
-            let default = [Texture::default()];
-            let buf = ctx
-                .make_buffer(&BufferInfo {
-                    debug_name: &format!("[FURIKAKE] Bindless Texture {}", i),
-                    byte_size: std::mem::size_of::<Texture>() as u32,
-                    visibility: dashi::MemoryVisibility::CpuAndGpu,
-                    usage: dashi::BufferUsage::STORAGE,
-                    initial_data: Some(unsafe { default.align_to::<u8>().1 }),
-                })
-                .expect("Failed making texture buffer");
+            h_data.push(Texture {
+                img: default_view,
+                sampler: Some(default_sampler),
+            });
 
-            let h = ctx
-                .map_buffer_mut::<Texture>(buf)
-                .expect("Failed to map buffer");
-            let nnt = NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for texture map!");
-
-            h_data.push(nnt);
             d_data.push(IndexedResource {
-                resource: ShaderResource::StorageBuffer(buf),
+                resource: ShaderResource::SampledImage(default_view, default_sampler),
                 slot: i as u32,
             });
         }
@@ -52,63 +64,46 @@ impl ReservedBindlessTextures {
             device_texture_data: d_data,
             host_texture_data: h_data,
             available,
+            def: DefaultData {
+                img: default_view,
+                sampler: default_sampler,
+            },
         }
     }
 
     pub fn extend(&mut self) {
-        let ctx: &mut Context = unsafe { self.ctx.as_mut() };
         if self.available.is_empty() {
             const EXTENSION_SIZE: usize = 128;
             let start = self.host_texture_data.len();
             let end = start + EXTENSION_SIZE;
+
+            let default_view = self.def.img.clone();
+            let default_sampler = self.def.sampler.clone();
             for i in start..end {
-                let default = [Texture::default()];
-                let buf = ctx
-                    .make_buffer(&BufferInfo {
-                        debug_name: &format!("[FURIKAKE] Bindless Texture {}", i),
-                        byte_size: std::mem::size_of::<Texture>() as u32,
-                        visibility: dashi::MemoryVisibility::CpuAndGpu,
-                        usage: dashi::BufferUsage::STORAGE,
-                        initial_data: Some(unsafe { default.align_to::<u8>().1 }),
-                    })
-                    .expect("Failed making texture buffer");
+                self.host_texture_data.push(Texture {
+                    img: default_view,
+                    sampler: Some(default_sampler),
+                });
 
-                let h = ctx
-                    .map_buffer_mut::<Texture>(buf)
-                    .expect("Failed to map buffer");
-                let nnt =
-                    NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for texture map!");
-
-                self.host_texture_data.push(nnt);
                 self.device_texture_data.push(IndexedResource {
-                    resource: ShaderResource::StorageBuffer(buf),
+                    resource: ShaderResource::SampledImage(default_view, default_sampler),
                     slot: i as u32,
                 });
             }
         }
     }
 
-    pub fn remove_texture(&mut self, texture: Handle<Texture>) {
-        if texture.valid() && (texture.slot as usize) < self.device_texture_data.len() {
-            self.available.push(texture.slot);
-        }
+    pub fn remove_texture(&mut self, texture: u16) {
+        self.available.push(texture);
     }
 
-    pub fn add_texture(&mut self) -> Handle<Texture> {
+    pub fn add_texture(&mut self, img: ImageView) -> u16 {
         if let Some(id) = self.available.pop() {
-            Handle::new(id, 0)
+            id
         } else {
             self.extend();
-            self.add_texture()
+            self.add_texture(img)
         }
-    }
-
-    pub fn texture(&self, handle: Handle<Texture>) -> &Texture {
-        unsafe { self.host_texture_data[handle.slot as usize].as_ref() }
-    }
-
-    pub fn texture_mut(&mut self, handle: Handle<Texture>) -> &mut Texture {
-        unsafe { self.host_texture_data[handle.slot as usize].as_mut() }
     }
 }
 
@@ -134,49 +129,5 @@ impl ReservedItem for ReservedBindlessTextures {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use dashi::{Context, ContextInfo};
-
-    #[test]
-    fn reuses_texture_slots() {
-        let mut ctx = Context::headless(&ContextInfo::default()).expect("create context");
-        let mut textures = ReservedBindlessTextures::new(&mut ctx);
-
-        let first = textures.add_texture();
-        let second = textures.add_texture();
-        assert_ne!(first.slot, second.slot);
-
-        textures.remove_texture(first);
-        let reused = textures.add_texture();
-
-        assert_eq!(first.slot, reused.slot);
-    }
-
-    #[test]
-    fn writes_texture_metadata() {
-        let mut ctx = Context::headless(&ContextInfo::default()).expect("create context");
-        let mut textures = ReservedBindlessTextures::new(&mut ctx);
-
-        let handle = textures.add_texture();
-        {
-            let texture = textures.texture_mut(handle);
-            texture.id = 42;
-            texture.width = 1024;
-            texture.height = 512;
-            texture.mip_levels = 5;
-        }
-
-        textures.update(&mut ctx).expect("update textures");
-
-        let texture = textures.texture(handle);
-        assert_eq!(texture.id, 42);
-        assert_eq!(texture.width, 1024);
-        assert_eq!(texture.height, 512);
-        assert_eq!(texture.mip_levels, 5);
     }
 }

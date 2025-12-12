@@ -38,22 +38,6 @@ fn mutates_all_bindless_reservations_across_frames() {
         handle.expect("camera handle")
     };
 
-    let texture_handle = {
-        let mut handle = None;
-        state
-            .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-                let h = textures.add_texture();
-                let tex = textures.texture_mut(h);
-                tex.id = 11;
-                tex.width = 800;
-                tex.height = 600;
-                tex.mip_levels = 4;
-                handle = Some(h);
-            })
-            .expect("mutate bindless texture");
-        handle.expect("texture handle")
-    };
-
     let transform_handle = {
         let mut handle = None;
         state
@@ -104,7 +88,6 @@ fn mutates_all_bindless_reservations_across_frames() {
             .expect("materials reservation");
 
         assert_eq!(cameras.camera(camera_handle).position, Vec3::new(0.0, 1.0, 2.0));
-        assert_eq!(textures.texture(texture_handle).id, 11);
         assert_eq!(
             transforms
                 .transformation(transform_handle)
@@ -139,15 +122,6 @@ fn mutates_all_bindless_reservations_across_frames() {
             cam.rotation = Quat::from_rotation_y(1.0);
         })
         .expect("animate camera");
-
-    state
-        .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-            let tex = textures.texture_mut(texture_handle);
-            tex.id = 27;
-            tex.width = 2048;
-            tex.height = 1024;
-        })
-        .expect("swap texture metadata");
 
     state
         .reserved_mut::<ReservedBindlessTransformations, _>(
@@ -196,9 +170,6 @@ fn mutates_all_bindless_reservations_across_frames() {
         .expect("material reservation");
 
     assert_eq!(cameras.camera(camera_handle).position, Vec3::new(-1.0, 0.5, 4.0));
-    assert_eq!(textures.texture(texture_handle).id, 27);
-    assert_eq!(textures.texture(texture_handle).width, 2048);
-    assert_eq!(textures.texture(texture_handle).height, 1024);
     assert_eq!(
         transforms
             .transformation(transform_handle)
