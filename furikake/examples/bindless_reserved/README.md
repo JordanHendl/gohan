@@ -63,24 +63,52 @@ state.update().expect("upload bindless camera data");
 ### Swap a texture binding at runtime
 
 ```rust
+use dashi::{Format, ImageInfo, ImageView, SamplerInfo};
+use furikake::reservations::bindless_materials::ReservedBindlessMaterials;
 use furikake::reservations::bindless_textures::ReservedBindlessTextures;
+
+let image = ctx
+    .make_image(&ImageInfo {
+        debug_name: "bindless_albedo",
+        dim: [1, 1, 1],
+        format: Format::RGBA8,
+        initial_data: Some(&[255, 255, 255, 255]),
+        ..Default::default()
+    })
+    .expect("create albedo image");
+let view = ImageView {
+    img: image,
+    ..Default::default()
+};
 
 let mut albedo = None;
 state
     .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-        albedo = Some(textures.add_texture());
+        albedo = Some(textures.add_texture(view));
     })
     .expect("allocate texture slot");
 
+// Or, provide an explicit sampler for the image view when reserving it.
+// let sampler = ctx
+//     .make_sampler(&SamplerInfo {
+//         max_anisotropy: 4.0,
+//         ..Default::default()
+//     })
+//     .expect("anisotropic sampler");
+// state
+//     .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
+//         albedo = Some(textures.add_texture_with_sampler(view, Some(sampler)));
+//     })
+//     .expect("allocate texture slot with sampler");
+
 let albedo = albedo.expect("texture handle");
 
-// Replace the ID when streaming a new texture into the same slot.
+// Replace the material binding to point at the newly streamed texture.
 state
-    .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-        let tex = textures.texture_mut(albedo);
-        tex.id = streaming_manager.latest_gpu_handle();
+    .reserved_mut::<ReservedBindlessMaterials, _>("meshi_bindless_materials", |materials| {
+        materials.material_mut(material_handle).base_color_texture_id = albedo;
     })
-    .expect("swap bindless texture");
+    .expect("swap bindless texture id");
 
 state.update().expect("refresh bindless texture table");
 ```

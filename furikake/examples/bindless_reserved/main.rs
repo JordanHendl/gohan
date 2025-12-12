@@ -1,5 +1,5 @@
 use bento::{Compiler, OptimizationLevel, Request, ShaderLang};
-use dashi::{Context, ContextInfo, ShaderType};
+use dashi::{Context, ContextInfo, Format, ImageInfo, ImageView, ShaderType};
 use furikake::recipe::RecipeBook;
 use furikake::reservations::ReservedTiming;
 use furikake::reservations::bindless_camera::ReservedBindlessCamera;
@@ -15,6 +15,23 @@ use std::time::{Duration, Instant};
 struct TimingData {
     current_time_ms: f32,
     frame_time_ms: f32,
+}
+
+fn make_solid_texture(ctx: &mut Context, name: &str, color: [u8; 4]) -> ImageView {
+    let image = ctx
+        .make_image(&ImageInfo {
+            debug_name: name,
+            dim: [1, 1, 1],
+            format: Format::RGBA8,
+            initial_data: Some(&color),
+            ..Default::default()
+        })
+        .expect("create example image");
+
+    ImageView {
+        img: image,
+        ..Default::default()
+    }
 }
 
 fn compile_shader() -> bento::CompilationResult {
@@ -141,16 +158,36 @@ fn main() {
         )
         .expect("mutate transformations");
 
+    let base_texture = make_solid_texture(&mut ctx, "bindless_reserved_base", [255, 0, 0, 255]);
+    let normal_texture = make_solid_texture(&mut ctx, "bindless_reserved_normal", [0, 255, 0, 255]);
+    let roughness_texture =
+        make_solid_texture(&mut ctx, "bindless_reserved_roughness", [0, 0, 255, 255]);
+    let occlusion_texture =
+        make_solid_texture(&mut ctx, "bindless_reserved_occlusion", [255, 255, 0, 255]);
+    let emissive_texture =
+        make_solid_texture(&mut ctx, "bindless_reserved_emissive", [255, 0, 255, 255]);
+
+    let mut texture_ids = [0u16; 5];
+    state
+        .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
+            texture_ids[0] = textures.add_texture(base_texture);
+            texture_ids[1] = textures.add_texture(normal_texture);
+            texture_ids[2] = textures.add_texture(roughness_texture);
+            texture_ids[3] = textures.add_texture(occlusion_texture);
+            texture_ids[4] = textures.add_texture(emissive_texture);
+        })
+        .expect("add bindless textures");
+
     let mut material_handle = None;
     state
         .reserved_mut::<ReservedBindlessMaterials, _>("meshi_bindless_materials", |materials| {
             let handle = materials.add_material();
             let material = materials.material_mut(handle);
-            material.base_color_texture_id = 2;
-            material.normal_texture_id = 3;
-            material.metallic_roughness_texture_id = 4;
-            material.occlusion_texture_id = 5;
-            material.emissive_texture_id = 6;
+            material.base_color_texture_id = texture_ids[0];
+            material.normal_texture_id = texture_ids[1];
+            material.metallic_roughness_texture_id = texture_ids[2];
+            material.occlusion_texture_id = texture_ids[3];
+            material.emissive_texture_id = texture_ids[4];
             material_handle = Some(handle);
         })
         .expect("mutate materials");
@@ -179,9 +216,6 @@ fn main() {
         let cameras = state
             .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
             .expect("camera reservation");
-        let textures = state
-            .reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
-            .expect("texture reservation");
         let transforms = state
             .reserved::<ReservedBindlessTransformations>("meshi_bindless_transformations")
             .expect("transform reservation");
@@ -243,11 +277,30 @@ fn main() {
         )
         .expect("refresh transform per-frame");
 
+    let updated_base = make_solid_texture(
+        &mut ctx,
+        "bindless_reserved_base_updated",
+        [0, 255, 255, 255],
+    );
+    let updated_normal = make_solid_texture(
+        &mut ctx,
+        "bindless_reserved_normal_updated",
+        [64, 64, 64, 255],
+    );
+
+    let mut updated_ids = (texture_ids[0], texture_ids[1]);
+    state
+        .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
+            updated_ids.0 = textures.add_texture(updated_base);
+            updated_ids.1 = textures.add_texture(updated_normal);
+        })
+        .expect("allocate updated textures");
+
     state
         .reserved_mut::<ReservedBindlessMaterials, _>("meshi_bindless_materials", |materials| {
             let material = materials.material_mut(material_handle);
-            material.base_color_texture_id = 0 as u16;
-            material.normal_texture_id = 0 as u16 + 1;
+            material.base_color_texture_id = updated_ids.0;
+            material.normal_texture_id = updated_ids.1;
         })
         .expect("adjust material bindings");
 
@@ -269,9 +322,6 @@ fn main() {
     let cameras = state
         .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
         .expect("camera reservation");
-    let textures = state
-        .reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
-        .expect("texture reservation");
     let transforms = state
         .reserved::<ReservedBindlessTransformations>("meshi_bindless_transformations")
         .expect("transform reservation");

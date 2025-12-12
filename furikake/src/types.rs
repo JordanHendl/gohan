@@ -1,4 +1,4 @@
-use dashi::{Handle, Image, ImageView, Sampler};
+use dashi::{Handle, ImageView, Sampler};
 use glam::{Mat4, Quat, Vec3, Vec4};
 
 #[repr(C)]

@@ -140,7 +140,25 @@ impl ReservedItem for ReservedBindlessMaterials {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dashi::{Context, ContextInfo};
+    use crate::reservations::bindless_textures::ReservedBindlessTextures;
+    use dashi::{Context, ContextInfo, Format, ImageInfo, ImageView};
+
+    fn make_dummy_texture(ctx: &mut Context, name: &str) -> ImageView {
+        let image = ctx
+            .make_image(&ImageInfo {
+                debug_name: name,
+                dim: [1, 1, 1],
+                format: Format::RGBA8,
+                initial_data: Some(&[255, 0, 0, 255]),
+                ..Default::default()
+            })
+            .expect("create dummy image");
+
+        ImageView {
+            img: image,
+            ..Default::default()
+        }
+    }
 
     #[test]
     fn reuses_material_slots() {
@@ -161,24 +179,36 @@ mod tests {
     fn stores_texture_ids_only() {
         let mut ctx = Context::headless(&ContextInfo::default()).expect("create context");
         let mut materials = ReservedBindlessMaterials::new(&mut ctx);
+        let mut textures = ReservedBindlessTextures::new(&mut ctx);
 
         let handle = materials.add_material();
+        let albedo_view = make_dummy_texture(&mut ctx, "bindless_materials_albedo");
+        let normal_view = make_dummy_texture(&mut ctx, "bindless_materials_normal");
+        let roughness_view = make_dummy_texture(&mut ctx, "bindless_materials_roughness");
+        let occlusion_view = make_dummy_texture(&mut ctx, "bindless_materials_occlusion");
+        let emissive_view = make_dummy_texture(&mut ctx, "bindless_materials_emissive");
+
+        let albedo_id = textures.add_texture(albedo_view);
+        let normal_id = textures.add_texture(normal_view);
+        let roughness_id = textures.add_texture(roughness_view);
+        let occlusion_id = textures.add_texture(occlusion_view);
+        let emissive_id = textures.add_texture(emissive_view);
         {
             let material = materials.material_mut(handle);
-            material.base_color_texture_id = 1;
-            material.normal_texture_id = 2;
-            material.metallic_roughness_texture_id = 3;
-            material.occlusion_texture_id = 4;
-            material.emissive_texture_id = 5;
+            material.base_color_texture_id = albedo_id;
+            material.normal_texture_id = normal_id;
+            material.metallic_roughness_texture_id = roughness_id;
+            material.occlusion_texture_id = occlusion_id;
+            material.emissive_texture_id = emissive_id;
         }
 
         materials.update(&mut ctx).expect("update materials");
 
         let material = materials.material(handle);
-        assert_eq!(material.base_color_texture_id, 1);
-        assert_eq!(material.normal_texture_id, 2);
-        assert_eq!(material.metallic_roughness_texture_id, 3);
-        assert_eq!(material.occlusion_texture_id, 4);
-        assert_eq!(material.emissive_texture_id, 5);
+        assert_eq!(material.base_color_texture_id, albedo_id);
+        assert_eq!(material.normal_texture_id, normal_id);
+        assert_eq!(material.metallic_roughness_texture_id, roughness_id);
+        assert_eq!(material.occlusion_texture_id, occlusion_id);
+        assert_eq!(material.emissive_texture_id, emissive_id);
     }
 }
