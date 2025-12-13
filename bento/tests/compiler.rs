@@ -114,6 +114,45 @@ fn compiles_slang_shader() -> Result<(), BentoError> {
 }
 
 #[test]
+fn infers_glsl_shader_language() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let request = sample_request(ShaderLang::Infer);
+    let path = "tests/fixtures/simple_compute.glsl";
+
+    let result = compiler.compile_from_file(path, &request)?;
+
+    assert_eq!(result.lang, ShaderLang::Glsl);
+
+    Ok(())
+}
+
+#[test]
+fn infers_hlsl_shader_language() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let request = sample_request(ShaderLang::Infer);
+    let path = "tests/fixtures/simple_compute.hlsl";
+
+    let result = compiler.compile_from_file(path, &request)?;
+
+    assert_eq!(result.lang, ShaderLang::Hlsl);
+
+    Ok(())
+}
+
+#[test]
+fn infers_slang_shader_language() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let request = sample_request(ShaderLang::Infer);
+    let path = "tests/fixtures/simple_compute.slang";
+
+    let result = compiler.compile_from_file(path, &request)?;
+
+    assert_eq!(result.lang, ShaderLang::Slang);
+
+    Ok(())
+}
+
+#[test]
 fn hlsl_binding_names_follow_registers() -> Result<(), BentoError> {
     let compiler = Compiler::new()?;
     let request = sample_request(ShaderLang::Hlsl);

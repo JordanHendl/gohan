@@ -313,13 +313,41 @@ impl Compiler {
         shader: &[u8],
         request: &Request,
     ) -> Result<CompilationResult, BentoError> {
+        self.compile_with_path(shader, request, None)
+    }
+
+    pub fn compile_from_file(
+        &self,
+        path: &str,
+        request: &Request,
+    ) -> Result<CompilationResult, BentoError> {
+        let bytes = fs::read(path)
+            .map_err(|e| BentoError::Io(std::io::Error::new(e.kind(), format!("{path}: {e}"))))?;
+        let mut result = self.compile_with_path(&bytes, request, Some(path))?;
+        result.file = Some(path.to_string());
+
+        Ok(result)
+    }
+
+    fn compile_with_path(
+        &self,
+        shader: &[u8],
+        request: &Request,
+        path: Option<&str>,
+    ) -> Result<CompilationResult, BentoError> {
         let source = std::str::from_utf8(shader)
             .map_err(|_| BentoError::InvalidInput("Shader source is not valid UTF-8".into()))?;
 
         let mut options = CompileOptions::new()
             .ok_or_else(|| BentoError::ShaderCompilation("Failed to create options".into()))?;
 
-        options.set_source_language(source_language(request.lang)?);
+        let resolved_lang = if matches!(request.lang, ShaderLang::Infer) {
+            infer_shader_lang(source, path)
+        } else {
+            request.lang
+        };
+
+        options.set_source_language(source_language(resolved_lang)?);
         options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_2 as u32);
         options.set_target_spirv(SpirvVersion::V1_3);
         options.set_optimization_level(shaderc_optimization(request.optimization));
@@ -343,7 +371,7 @@ impl Compiler {
 
         let mut spirv = artifact.as_binary().to_vec();
         let spirv_bytes = spirv_words_to_bytes(&spirv);
-        let variables = reflect_bindings(spirv_bytes, source, request.lang)?;
+        let variables = reflect_bindings(spirv_bytes, source, resolved_lang)?;
         spirv = rewrite_spirv_binding_names(&spirv, &variables)?;
         let spirv_bytes = spirv_words_to_bytes(&spirv);
         let metadata = reflect_metadata(spirv_bytes)?;
@@ -351,25 +379,12 @@ impl Compiler {
         Ok(CompilationResult {
             name: request.name.clone(),
             file: None,
-            lang: request.lang,
+            lang: resolved_lang,
             stage: request.stage,
             variables,
             metadata,
             spirv,
         })
-    }
-
-    pub fn compile_from_file(
-        &self,
-        path: &str,
-        request: &Request,
-    ) -> Result<CompilationResult, BentoError> {
-        let bytes = fs::read(path)
-            .map_err(|e| BentoError::Io(std::io::Error::new(e.kind(), format!("{path}: {e}"))))?;
-        let mut result = self.compile(&bytes, request)?;
-        result.file = Some(path.to_string());
-
-        Ok(result)
     }
 }
 
@@ -382,6 +397,65 @@ fn shader_stage(stage: dashi::ShaderType) -> Result<ShaderKind, BentoError> {
             "ShaderType::All is not supported for compilation".into(),
         )),
     }
+}
+
+fn infer_shader_lang(source: &str, filename: Option<&str>) -> ShaderLang {
+    let mut detected: Option<ShaderLang> = None;
+
+    if let Some(extension) = filename
+        .and_then(|path| Path::new(path).extension())
+        .and_then(|ext| ext.to_str())
+    {
+        match extension.to_ascii_lowercase().as_str() {
+            "slang" => detected = Some(ShaderLang::Slang),
+            "hlsl" | "hlsli" => detected = Some(ShaderLang::Hlsl),
+            "glsl" | "vert" | "frag" | "comp" => detected = Some(ShaderLang::Glsl),
+            _ => {}
+        }
+    }
+
+    for line in source.lines().map(str::trim) {
+        if detected.is_some() {
+            break;
+        }
+
+        if line.is_empty() {
+            continue;
+        }
+
+        if line.starts_with("import ") || line.starts_with("module ") {
+            detected = Some(ShaderLang::Slang);
+            break;
+        }
+
+        if line.starts_with("#version") || line.starts_with("#extension") {
+            detected = Some(ShaderLang::Glsl);
+            break;
+        }
+
+        if line.contains(": SV_")
+            || line.contains(": register(")
+            || line.contains("[[vk::binding")
+            || line.contains("cbuffer")
+            || line.contains("RWStructuredBuffer")
+            || line.contains("StructuredBuffer")
+            || line.contains("SamplerState")
+            || line.contains("Texture2D")
+            || line.contains("Texture3D")
+            || line.contains("TextureCube")
+            || line.contains("[numthreads(")
+        {
+            detected = Some(ShaderLang::Hlsl);
+            break;
+        }
+
+        if line.contains("layout(") || line.contains("gl_") {
+            detected = Some(ShaderLang::Glsl);
+            break;
+        }
+    }
+
+    detected.unwrap_or(ShaderLang::Glsl)
 }
 
 fn source_language(lang: ShaderLang) -> Result<SourceLanguage, BentoError> {
