@@ -8,7 +8,7 @@ use super::{ReservedBinding, ReservedItem};
 
 pub(crate) struct ReservedCamera {
     camera: Camera,
-    buffer: Handle<Buffer>,
+    buffer: BufferView,
     variable: BindGroupVariable,
 }
 
@@ -44,7 +44,7 @@ impl ReservedItem for ReservedCamera {
 
         s[0].transform = self.camera.view_matrix();
 
-        ctx.unmap_buffer(self.buffer)
+        ctx.unmap_buffer(self.buffer.handle)
             .map_err(crate::error::FurikakeError::buffer_unmap_failed)?;
 
         Ok(())
@@ -53,7 +53,7 @@ impl ReservedItem for ReservedCamera {
     fn binding(&self) -> ReservedBinding<'_> {
         return ReservedBinding::Binding(BindingInfo {
             resource: ShaderResource::ConstBuffer(BufferView {
-                handle: self.buffer,
+                handle: self.buffer.handle,
                 size: (std::mem::size_of::<Data>()) as u64,
                 offset: 0,
             }),

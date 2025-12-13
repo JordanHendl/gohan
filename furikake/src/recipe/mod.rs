@@ -245,8 +245,7 @@ mod tests {
     use crate::reservations::{ReservedBinding, ReservedItem};
     use crate::{DefaultState, GPUState, ReservedMetadata};
     use dashi::{
-        BindGroupVariableType, BufferInfo, ContextInfo, MemoryVisibility, ShaderResource,
-        ShaderType,
+        BindGroupVariableType, BufferInfo, BufferView, ContextInfo, MemoryVisibility, ShaderResource, ShaderType
     };
 
     fn make_shader_variable(
@@ -324,7 +323,7 @@ mod tests {
 
             Self {
                 resources: vec![IndexedResource {
-                    resource: ShaderResource::Buffer(buffer),
+                    resource: ShaderResource::Buffer(BufferView::new(buffer)),
                     slot: binding,
                 }],
             }

@@ -40,7 +40,7 @@ pub struct BindlessState {
 mod tests {
     use super::*;
     use crate::reservations::ReservedTiming;
-    use dashi::{ContextInfo, MemoryVisibility};
+    use dashi::{BufferView, ContextInfo, MemoryVisibility};
     use std::time::{Duration, Instant};
 
     #[repr(C)]
@@ -69,7 +69,7 @@ mod tests {
             .expect("timing reference");
 
         let mapped = ctx
-            .map_buffer::<TimingData>(timing.buffer())
+            .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
             .expect("map timing buffer");
 
         // Allow some wiggle room for the time spent running the test.

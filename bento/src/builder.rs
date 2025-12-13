@@ -4,13 +4,7 @@ use std::{
 };
 
 use dashi::{
-    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindGroupVariableType,
-    BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BufferInfo, BufferUsage,
-    ComputePipeline, ComputePipelineInfo, ComputePipelineLayout, ComputePipelineLayoutInfo,
-    Context, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo,
-    GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView,
-    IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo, SampleCount,
-    SamplerInfo, ShaderInfo, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo,
+    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindGroupVariableType, BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BufferInfo, BufferUsage, BufferView, ComputePipeline, ComputePipelineInfo, ComputePipelineLayout, ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo, SampleCount, SamplerInfo, ShaderInfo, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo
 };
 
 use crate::{CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang};
@@ -53,7 +47,7 @@ impl DefaultResources {
             })
             .ok()?;
 
-        Some(ShaderResource::Buffer(buffer))
+        Some(ShaderResource::Buffer(BufferView::new(buffer)))
     }
 
     fn make_storage(ctx: &mut dashi::Context) -> Option<ShaderResource> {
@@ -67,7 +61,7 @@ impl DefaultResources {
             })
             .ok()?;
 
-        Some(ShaderResource::StorageBuffer(buffer))
+        Some(ShaderResource::StorageBuffer(BufferView::new(buffer)))
     }
 
     fn make_sampled_image(ctx: &mut dashi::Context) -> Option<ShaderResource> {

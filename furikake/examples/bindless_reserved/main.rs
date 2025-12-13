@@ -1,5 +1,5 @@
 use bento::{Compiler, OptimizationLevel, Request, ShaderLang};
-use dashi::{Context, ContextInfo, Format, ImageInfo, ImageView, ShaderType};
+use dashi::{BufferView, Context, ContextInfo, Format, ImageInfo, ImageView, ShaderType};
 use furikake::recipe::RecipeBook;
 use furikake::reservations::ReservedTiming;
 use furikake::reservations::bindless_camera::ReservedBindlessCamera;
@@ -199,7 +199,7 @@ fn main() {
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
     let timing_map = ctx
-        .map_buffer::<TimingData>(timing.buffer())
+        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
         .expect("map timing buffer");
     println!(
         "Timing snapshot -> current: {:.3}ms | frame: {:.3}ms",
@@ -310,7 +310,7 @@ fn main() {
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
     let timing_map = ctx
-        .map_buffer::<TimingData>(timing.buffer())
+        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
         .expect("map timing buffer");
     println!(
         "After runtime edits -> current: {:.3}ms | frame: {:.3}ms",

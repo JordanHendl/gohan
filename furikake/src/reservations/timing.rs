@@ -48,7 +48,7 @@ impl ReservedItem for ReservedTiming {
 
     fn update(&mut self, ctx: &mut Context) -> Result<(), crate::error::FurikakeError> {
         let s = ctx
-            .map_buffer_mut::<TimeData>(self.buffer)
+            .map_buffer_mut::<TimeData>(BufferView::new(self.buffer))
             .map_err(crate::error::FurikakeError::buffer_map_failed)?;
         let now = std::time::Instant::now();
         s[0].current_time_ms = now.elapsed().as_secs_f32() * 1000.0;

@@ -2,7 +2,7 @@
 
 use std::ptr::NonNull;
 
-use dashi::{BufferInfo, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource};
+use dashi::{BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource};
 
 use crate::types::Camera;
 
@@ -36,13 +36,13 @@ impl ReservedBindlessCamera {
                 .expect("Failed making camera buffer");
 
             let h = ctx
-                .map_buffer_mut::<Camera>(buf)
+                .map_buffer_mut::<Camera>(BufferView::new(buf))
                 .expect("Failed to map buffer");
             let nncam = NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for camera map!");
 
             h_data.push(nncam);
             d_data.push(IndexedResource {
-                resource: ShaderResource::StorageBuffer(buf),
+                resource: ShaderResource::StorageBuffer(BufferView::new(buf)),
                 slot: i as u32,
             });
         }
@@ -74,14 +74,14 @@ impl ReservedBindlessCamera {
                     .expect("Failed making camera buffer");
 
                 let h = ctx
-                    .map_buffer_mut::<Camera>(buf)
+                    .map_buffer_mut::<Camera>(BufferView::new(buf))
                     .expect("Failed to map buffer");
                 let nncam =
                     NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for camera map!");
 
                 self.host_camera_data.push(nncam);
                 self.device_camera_data.push(IndexedResource {
-                    resource: ShaderResource::StorageBuffer(buf),
+                    resource: ShaderResource::StorageBuffer(BufferView::new(buf)),
                     slot: i as u32,
                 });
             }

@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use dashi::{Context, ContextInfo, Format, ImageInfo, ImageView};
+use dashi::{BufferView, Context, ContextInfo, Format, ImageInfo, ImageView};
 use furikake::BindlessState;
 use furikake::reservations::ReservedTiming;
 use furikake::reservations::bindless_camera::ReservedBindlessCamera;
@@ -201,7 +201,7 @@ fn mutates_all_bindless_reservations_across_frames() {
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
     let timing_map = ctx
-        .map_buffer::<TimingData>(timing.buffer())
+        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
         .expect("map timing");
     assert!(timing_map[0].frame_time_ms >= 150.0);
     assert!(timing_map[0].frame_time_ms < 500.0);

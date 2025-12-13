@@ -257,6 +257,32 @@ impl TransientAllocator {
         BufferView::new(handle)
     }
 
+    // Make a transient buffer matching the parameters input
+    pub fn make_buffer_mapped(&mut self, info: &BufferInfo) -> (BufferView, *mut u8, u64) {
+        let key = BufferKey::from(info);
+        let handle = self
+            .available_buffers
+            .get_mut(&key)
+            .and_then(|list| list.pop())
+            .map(|entry| entry.handle)
+            .unwrap_or_else(|| {
+                unsafe { self.ctx.as_mut() }
+                    .make_buffer(info)
+                    .expect("Make transient buffer")
+            });
+
+        self.buffers.data_mut().push((key, handle));
+
+        let ptr = unsafe {
+            self.ctx
+                .as_mut()
+                .map_buffer_mut::<u8>(BufferView::new(handle))
+                .unwrap()
+                .as_mut_ptr()
+        };
+        (BufferView::new(handle), ptr, info.byte_size as u64)
+    }
+
     pub fn make_render_pass(&mut self, info: &RenderPassInfo) -> Handle<RenderPass> {
         let hash = hash_value(info);
         let handle = self

@@ -2,7 +2,9 @@
 
 use std::ptr::NonNull;
 
-use dashi::{BufferInfo, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource};
+use dashi::{
+    BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource,
+};
 
 use crate::types::Transformation;
 
@@ -25,15 +27,16 @@ impl ReservedBindlessTransformations {
 
         for i in 0..START_SIZE {
             let default = [Transformation::default()];
-            let buf = ctx
-                .make_buffer(&BufferInfo {
+            let buf = BufferView::new(
+                ctx.make_buffer(&BufferInfo {
                     debug_name: &format!("[FURIKAKE] Bindless Transformation {}", i),
                     byte_size: std::mem::size_of::<Transformation>() as u32,
                     visibility: dashi::MemoryVisibility::CpuAndGpu,
                     usage: dashi::BufferUsage::STORAGE,
                     initial_data: Some(unsafe { default.align_to::<u8>().1 }),
                 })
-                .expect("Failed making transformation buffer");
+                .expect("Failed making transformation buffer"),
+            );
 
             let h = ctx
                 .map_buffer_mut::<Transformation>(buf)
@@ -64,15 +67,16 @@ impl ReservedBindlessTransformations {
             let end = start + EXTENSION_SIZE;
             for i in start..end {
                 let default = [Transformation::default()];
-                let buf = ctx
-                    .make_buffer(&BufferInfo {
+                let buf = BufferView::new(
+                    ctx.make_buffer(&BufferInfo {
                         debug_name: &format!("[FURIKAKE] Bindless Transformation {}", i),
                         byte_size: std::mem::size_of::<Transformation>() as u32,
                         visibility: dashi::MemoryVisibility::CpuAndGpu,
                         usage: dashi::BufferUsage::STORAGE,
                         initial_data: Some(unsafe { default.align_to::<u8>().1 }),
                     })
-                    .expect("Failed making transformation buffer");
+                    .expect("Failed making transformation buffer"),
+                );
 
                 let h = ctx
                     .map_buffer_mut::<Transformation>(buf)

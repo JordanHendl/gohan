@@ -1,5 +1,5 @@
 use bento::{Compiler, OptimizationLevel, Request, ShaderLang};
-use dashi::{Context, ContextInfo, ShaderType};
+use dashi::{BufferView, Context, ContextInfo, ShaderType};
 use furikake::recipe::RecipeBook;
 use furikake::reservations::ReservedTiming;
 use furikake::{DefaultState, Resolver};
@@ -77,7 +77,7 @@ fn main() {
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
     let mapped = ctx
-        .map_buffer::<TimingData>(timing.buffer())
+        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
         .expect("map timing buffer");
 
     println!(

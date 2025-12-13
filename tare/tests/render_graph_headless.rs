@@ -133,7 +133,7 @@ fn headless_render_graph_outputs_readable_image() {
     copy_ring.wait_all().expect("wait for readback");
 
     let data = context
-        .map_buffer::<u8>(readback)
+        .map_buffer::<u8>(readback.into())
         .expect("map readback buffer")
         .to_vec();
     context.unmap_buffer(readback).expect("unmap readback buffer");

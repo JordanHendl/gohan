@@ -8,7 +8,7 @@ use bento::{
     builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
 };
 use dashi::gpu::vulkan::{Context, ContextInfo, GPUError};
-use dashi::{BufferInfo, BufferUsage, IndexedResource, MemoryVisibility, ShaderResource};
+use dashi::{BufferInfo, BufferUsage, BufferView, IndexedResource, MemoryVisibility, ShaderResource};
 use serial_test::serial;
 
 const SIMPLE_COMPUTE: &str = r#"
@@ -253,7 +253,7 @@ fn builds_compute_pipeline_with_resources_and_table_updates() {
 
     let mut pipeline = ComputePipelineBuilder::new()
         .shader_compiled(Some(compute_stage))
-        .add_variable("config", ShaderResource::Buffer(uniform))
+        .add_variable("config", ShaderResource::Buffer(uniform.into()))
         .add_table_variable("data", 2)
         .build(&mut ctx)
         .expect("pipeline should build");
@@ -271,7 +271,7 @@ fn builds_compute_pipeline_with_resources_and_table_updates() {
     pipeline.update_table(
         "data",
         IndexedResource {
-            resource: ShaderResource::StorageBuffer(replacement),
+            resource: ShaderResource::StorageBuffer(replacement.into()),
             slot: 1,
         },
     );
@@ -289,7 +289,7 @@ fn builds_compute_pipeline_with_resources_and_table_updates() {
     pipeline.update_table_slice(
         "data",
         &[IndexedResource {
-            resource: ShaderResource::StorageBuffer(replacement_second),
+            resource: ShaderResource::StorageBuffer(replacement_second.into()),
             slot: 0,
         }],
     );
@@ -301,7 +301,7 @@ fn builds_compute_pipeline_with_initial_table_resources() {
     let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
     let compute_stage = compile_shader(dashi::ShaderType::Compute, BUFFERED_COMPUTE);
 
-    let uniform = ctx
+    let uniform = BufferView::new(ctx
         .make_buffer(&BufferInfo {
             debug_name: "config",
             byte_size: 16,
@@ -309,9 +309,9 @@ fn builds_compute_pipeline_with_initial_table_resources() {
             usage: BufferUsage::UNIFORM,
             initial_data: None,
         })
-        .expect("uniform buffer");
+        .expect("uniform buffer"));
 
-    let first_storage = ctx
+    let first_storage = BufferView::new(ctx
         .make_buffer(&BufferInfo {
             debug_name: "table_entry_0",
             byte_size: 16,
@@ -319,9 +319,9 @@ fn builds_compute_pipeline_with_initial_table_resources() {
             usage: BufferUsage::STORAGE,
             initial_data: None,
         })
-        .expect("first storage buffer");
+        .expect("first storage buffer"));
 
-    let second_storage = ctx
+    let second_storage = BufferView::new(ctx
         .make_buffer(&BufferInfo {
             debug_name: "table_entry_1",
             byte_size: 16,
@@ -329,7 +329,7 @@ fn builds_compute_pipeline_with_initial_table_resources() {
             usage: BufferUsage::STORAGE,
             initial_data: None,
         })
-        .expect("second storage buffer");
+        .expect("second storage buffer"));
 
     let initial_resources = vec![
         IndexedResource {
@@ -342,7 +342,7 @@ fn builds_compute_pipeline_with_initial_table_resources() {
         },
     ];
 
-    let replacement = ctx
+    let replacement = BufferView::new(ctx
         .make_buffer(&BufferInfo {
             debug_name: "replacement_initial_table",
             byte_size: 16,
@@ -350,7 +350,7 @@ fn builds_compute_pipeline_with_initial_table_resources() {
             usage: BufferUsage::STORAGE,
             initial_data: None,
         })
-        .expect("replacement buffer");
+        .expect("replacement buffer"));
 
     let mut pipeline = ComputePipelineBuilder::new()
         .shader_compiled(Some(compute_stage))
@@ -392,15 +392,16 @@ fn builds_graphics_pipeline_with_shared_uniform_bindings() {
     let vertex = compile_shader(dashi::ShaderType::Vertex, GRAPHICS_VERTEX_UNIFORM);
     let fragment = compile_shader(dashi::ShaderType::Fragment, GRAPHICS_FRAGMENT_UNIFORM);
 
-    let globals = ctx
-        .make_buffer(&BufferInfo {
+    let globals = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
             debug_name: "globals",
             byte_size: 64,
             visibility: MemoryVisibility::CpuAndGpu,
             usage: BufferUsage::UNIFORM,
             initial_data: None,
         })
-        .expect("globals buffer");
+        .expect("globals buffer"),
+    );
 
     let pipeline = GraphicsPipelineBuilder::new()
         .vertex_compiled(Some(vertex))

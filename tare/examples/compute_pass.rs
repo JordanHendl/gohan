@@ -43,7 +43,7 @@ fn main() {
     context.sync_current_device();
 
     let data = context
-        .map_buffer::<u32>(output.handle)
+        .map_buffer::<u32>(output.handle.into())
         .expect("map compute output buffer")
         .to_vec();
     context
