@@ -10,6 +10,11 @@ pub struct StagedBuffer {
     mapped: (*mut u8, usize),
 }
 
+impl Default for StagedBuffer {
+    fn default() -> Self {
+        Self { device: BufferView::new(Default::default()), host: BufferView::new(Default::default()), mapped: Default::default() }
+    }
+}
 impl StagedBuffer {
     pub fn new(ctx: &mut Context, info: BufferInfo) -> Self {
         let mut info = info.clone();
