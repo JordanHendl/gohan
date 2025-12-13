@@ -19,6 +19,7 @@ pub use error::*;
 /// Supported input languages for Bento shader compilation.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum ShaderLang {
+    Infer,
     Slang,
     Glsl,
     Hlsl,
@@ -390,6 +391,7 @@ fn source_language(lang: ShaderLang) -> Result<SourceLanguage, BentoError> {
         ShaderLang::Other => Err(BentoError::InvalidInput(
             "Unsupported shader language".into(),
         )),
+        ShaderLang::Infer => Ok(SourceLanguage::GLSL),
     }
 }
 
@@ -572,6 +574,7 @@ fn parse_source_bindings(source: &str, lang: ShaderLang) -> Result<Vec<SourceBin
         ShaderLang::Other => Err(BentoError::InvalidInput(
             "Unsupported shader language for reflection".into(),
         )),
+        ShaderLang::Infer => parse_glsl_bindings(source),
     }
 }
 

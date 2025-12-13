@@ -10,10 +10,10 @@ use dashi::{
     Context, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo,
     GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView,
     IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo, SampleCount,
-    SamplerInfo, ShaderInfo, ShaderResource, VertexDescriptionInfo, VertexEntryInfo,
+    SamplerInfo, ShaderInfo, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo,
 };
 
-use crate::CompilationResult;
+use crate::{CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang};
 
 fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::ShaderType {
     if lhs == rhs {
@@ -720,13 +720,25 @@ impl ComputePipelineBuilder {
     }
 
     pub fn shader(self, shader: Option<&[u8]>) -> Self {
-        if let Some(bytes) = shader {
-            if let Ok(result) = CompilationResult::from_bytes(bytes) {
-                return Self {
-                    shader: Some(result),
-                    ..self
-                };
-            }
+        if let Some(shader) = shader {
+            let compiler = Compiler::new().unwrap();
+            return Self {
+                shader: Some(
+                    compiler
+                        .compile(
+                            shader,
+                            &Request {
+                                name: None,
+                                lang: ShaderLang::Infer,
+                                stage: ShaderType::Compute,
+                                optimization: OptimizationLevel::Performance,
+                                debug_symbols: false,
+                            },
+                        )
+                        .unwrap(),
+                ),
+                ..self
+            };
         }
 
         self
