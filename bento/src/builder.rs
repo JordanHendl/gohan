@@ -848,6 +848,7 @@ impl ComputePipelineBuilder {
 
         let mut bg_layouts: [Option<Handle<BindGroupLayout>>; 4] = [None; 4];
         let mut bind_groups = Vec::new();
+        let mut defaults = DefaultResources::default();
 
         for set in 0..4u32 {
             let vars: Vec<dashi::BindGroupVariable> = shader
@@ -888,10 +889,14 @@ impl ComputePipelineBuilder {
                     continue;
                 }
 
-                if let Some(res) = variables.get(&var.name) {
+                if let Some(res) = variables
+                    .get(&var.name)
+                    .cloned()
+                    .or_else(|| defaults.get(ctx, var.kind.var_type))
+                {
                     bindings.push(dashi::BindingInfo {
                         binding: var.kind.binding,
-                        resource: res.clone(),
+                        resource: res,
                     });
                 }
             }
