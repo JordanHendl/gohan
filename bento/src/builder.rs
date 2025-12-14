@@ -186,7 +186,7 @@ fn resources_from_config(
     }
 }
 
-fn resolve_binding_count(
+fn resolve_table_binding_count(
     var: &dashi::BindGroupVariable,
     config: Option<&BindTableVariable>,
 ) -> u32 {
@@ -197,6 +197,12 @@ fn resolve_binding_count(
     };
 
     if count == 0 { 256 } else { count }
+}
+
+fn resolve_group_binding_count(var: &dashi::BindGroupVariable) -> u32 {
+    let count = var.count;
+
+    if count == 0 { 1 } else { count }
 }
 
 #[derive(Clone)]
@@ -502,7 +508,8 @@ impl GraphicsPipelineBuilder {
                     continue;
                 }
 
-                let count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                let count =
+                    resolve_table_binding_count(&var.kind, table_variables.get(&var.name));
 
                 if let Some(existing) = combined_vars.get(&var.kind.binding) {
                     if existing.count != count {
@@ -550,7 +557,7 @@ impl GraphicsPipelineBuilder {
                 }
 
                 if let Some(resource) = table_variables.get(&var.name) {
-                    let expected_count = resolve_binding_count(&var.kind, Some(resource));
+                    let expected_count = resolve_table_binding_count(&var.kind, Some(resource));
                     if bound_indices.insert(var.kind.binding) {
                         let (initial_resources, size) = resources_from_config(
                             &mut defaults,
@@ -849,8 +856,7 @@ impl ComputePipelineBuilder {
                 .filter(|var| var.set == set)
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
-                    var_with_count.count =
-                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                    var_with_count.count = resolve_group_binding_count(&var.kind);
 
                     var_with_count
                 })
@@ -918,7 +924,7 @@ impl ComputePipelineBuilder {
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
                     var_with_count.count =
-                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                        resolve_table_binding_count(&var.kind, table_variables.get(&var.name));
 
                     var_with_count
                 })
@@ -953,7 +959,7 @@ impl ComputePipelineBuilder {
                 }
 
                 if let Some(res) = table_variables.get(&var.name) {
-                    let expected_count = resolve_binding_count(&var.kind, Some(res));
+                    let expected_count = resolve_table_binding_count(&var.kind, Some(res));
                     let (initial_resources, size) =
                         resources_from_config(&mut defaults, ctx, &var.kind, res, expected_count)?;
                     resources.push(initial_resources);
