@@ -8,7 +8,9 @@ use bento::{
     builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
 };
 use dashi::gpu::vulkan::{Context, ContextInfo, GPUError};
-use dashi::{BufferInfo, BufferUsage, BufferView, IndexedResource, MemoryVisibility, ShaderResource};
+use dashi::{
+    BufferInfo, BufferUsage, BufferView, IndexedResource, MemoryVisibility, ShaderResource,
+};
 use serial_test::serial;
 
 const SIMPLE_COMPUTE: &str = r#"
@@ -88,6 +90,110 @@ layout(set = 0, binding = 0) readonly buffer Data {
 layout(location = 0) out vec4 color;
 void main() {
     color = vec4(data.value, 0.0, 0.0, 1.0);
+}
+"#;
+
+const SCENE_CULL_COMPUTE: &str = r#"
+#version 450
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+struct SceneObject {
+    mat4 local_transform;
+    mat4 world_transform;
+    uint scene_mask;
+    uint parent_slot;
+    uint dirty;
+    uint is_active;
+    uint parent;
+    uint child_count;
+    uint children[16];
+};
+
+struct SceneBin {
+    uint id;
+    uint mask;
+};
+
+struct CulledObject {
+    mat4 total_transform;
+    uint bin_id;
+};
+
+struct Camera {
+    vec3 position;
+    float _padding0;
+    vec4 rotation;
+};
+
+layout(set = 0, binding = 0) buffer SceneObjects {
+    SceneObject objects[];
+} objects;
+
+layout(set = 0, binding = 1) buffer SceneBins {
+    SceneBin bins[];
+} bins;
+
+layout(set = 0, binding = 2) buffer CulledBins {
+    CulledObject culled[];
+} culled;
+
+layout(set = 0, binding = 3) buffer BinCounts {
+    uint counts[];
+} counts;
+
+layout(set = 0, binding = 4) uniform SceneParams {
+    uint num_bins;
+    uint max_objects;
+    uint _padding1;
+} params;
+
+layout(set = 0, binding = 5) uniform SceneCamera {
+    uint slot;
+} camera;
+
+layout(set = 1, binding = 0) buffer Cameras {
+    Camera cameras[];
+} cameras;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= params.max_objects) {
+        return;
+    }
+
+    SceneObject obj = objects.objects[idx];
+    if (obj.is_active == 0) {
+        return;
+    }
+
+    if (camera.slot == 0xffffffffu) {
+        return;
+    }
+
+    Camera cam = cameras.cameras[camera.slot];
+    vec3 world_position = obj.world_transform[3].xyz;
+    vec3 to_object = world_position - cam.position;
+    vec3 forward = vec3(0.0, 0.0, -1.0);
+
+    if (dot(forward, to_object) <= 0.0) {
+        return;
+    }
+
+    for (uint bin = 0; bin < params.num_bins; ++bin) {
+        if ((obj.scene_mask & bins.bins[bin].mask) == 0) {
+            continue;
+        }
+
+        uint write_index = atomicAdd(counts.counts[bin], 1);
+        if (write_index >= params.max_objects) {
+            continue;
+        }
+
+        uint target = bin * params.max_objects + write_index;
+        culled.culled[target].total_transform = obj.world_transform;
+        culled.culled[target].bin_id = bins.bins[bin].id;
+    }
 }
 "#;
 
@@ -323,35 +429,38 @@ fn builds_compute_pipeline_with_initial_table_resources() {
     let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
     let compute_stage = compile_shader(dashi::ShaderType::Compute, BUFFERED_COMPUTE);
 
-    let uniform = BufferView::new(ctx
-        .make_buffer(&BufferInfo {
+    let uniform = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
             debug_name: "config",
             byte_size: 16,
             visibility: MemoryVisibility::CpuAndGpu,
             usage: BufferUsage::UNIFORM,
             initial_data: None,
         })
-        .expect("uniform buffer"));
+        .expect("uniform buffer"),
+    );
 
-    let first_storage = BufferView::new(ctx
-        .make_buffer(&BufferInfo {
+    let first_storage = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
             debug_name: "table_entry_0",
             byte_size: 16,
             visibility: MemoryVisibility::CpuAndGpu,
             usage: BufferUsage::STORAGE,
             initial_data: None,
         })
-        .expect("first storage buffer"));
+        .expect("first storage buffer"),
+    );
 
-    let second_storage = BufferView::new(ctx
-        .make_buffer(&BufferInfo {
+    let second_storage = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
             debug_name: "table_entry_1",
             byte_size: 16,
             visibility: MemoryVisibility::CpuAndGpu,
             usage: BufferUsage::STORAGE,
             initial_data: None,
         })
-        .expect("second storage buffer"));
+        .expect("second storage buffer"),
+    );
 
     let initial_resources = vec![
         IndexedResource {
@@ -364,15 +473,16 @@ fn builds_compute_pipeline_with_initial_table_resources() {
         },
     ];
 
-    let replacement = BufferView::new(ctx
-        .make_buffer(&BufferInfo {
+    let replacement = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
             debug_name: "replacement_initial_table",
             byte_size: 16,
             visibility: MemoryVisibility::CpuAndGpu,
             usage: BufferUsage::STORAGE,
             initial_data: None,
         })
-        .expect("replacement buffer"));
+        .expect("replacement buffer"),
+    );
 
     let mut pipeline = ComputePipelineBuilder::new()
         .shader_compiled(Some(compute_stage))
@@ -439,6 +549,49 @@ fn compute_table_count_can_be_overridden_with_resources_length() {
             ],
         )
         .build(&mut ctx);
+
+    assert!(pipeline.is_some());
+}
+
+#[test]
+#[serial]
+fn compute_bindings_populated_in_correct_slots() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+    let compute_stage = compile_shader(dashi::ShaderType::Compute, SCENE_CULL_COMPUTE);
+
+    let storage_info = BufferInfo {
+        debug_name: "storage",
+        byte_size: 256,
+        visibility: MemoryVisibility::CpuAndGpu,
+        usage: BufferUsage::STORAGE,
+        initial_data: None,
+    };
+
+    let uniform_info = BufferInfo {
+        debug_name: "uniform",
+        byte_size: 32,
+        visibility: MemoryVisibility::CpuAndGpu,
+        usage: BufferUsage::UNIFORM,
+        initial_data: None,
+    };
+
+    let mut builder = ComputePipelineBuilder::new().shader_compiled(Some(compute_stage));
+
+    for name in ["objects", "bins", "culled", "counts", "cameras"] {
+        let buffer = ctx
+            .make_buffer(&storage_info)
+            .expect("storage buffer for binding");
+        builder = builder.add_variable(name, ShaderResource::StorageBuffer(buffer.into()));
+    }
+
+    for name in ["params", "camera"] {
+        let buffer = ctx
+            .make_buffer(&uniform_info)
+            .expect("uniform buffer for binding");
+        builder = builder.add_variable(name, ShaderResource::Buffer(buffer.into()));
+    }
+
+    let pipeline = builder.build(&mut ctx);
 
     assert!(pipeline.is_some());
 }
@@ -572,23 +725,23 @@ fn graphics_table_count_can_be_overridden() {
     let pipeline = GraphicsPipelineBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
-//        .add_table_variable_with_resources(
-//            &data_name,
-//            vec![
-//                IndexedResource {
-//                    resource: ShaderResource::StorageBuffer(first),
-//                    slot: 0,
-//                },
-//                IndexedResource {
-//                    resource: ShaderResource::StorageBuffer(second),
-//                    slot: 1,
-//                },
-//                IndexedResource {
-//                    resource: ShaderResource::StorageBuffer(third),
-//                    slot: 2,
-//                },
-//            ],
-//        )
+        //        .add_table_variable_with_resources(
+        //            &data_name,
+        //            vec![
+        //                IndexedResource {
+        //                    resource: ShaderResource::StorageBuffer(first),
+        //                    slot: 0,
+        //                },
+        //                IndexedResource {
+        //                    resource: ShaderResource::StorageBuffer(second),
+        //                    slot: 1,
+        //                },
+        //                IndexedResource {
+        //                    resource: ShaderResource::StorageBuffer(third),
+        //                    slot: 2,
+        //                },
+        //            ],
+        //        )
         .build(&mut ctx);
 
     assert!(pipeline.is_some());

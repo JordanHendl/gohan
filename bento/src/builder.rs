@@ -186,7 +186,7 @@ fn resources_from_config(
     }
 }
 
-fn resolve_binding_count(
+fn resolve_table_binding_count(
     var: &dashi::BindGroupVariable,
     config: Option<&BindTableVariable>,
 ) -> u32 {
@@ -197,6 +197,12 @@ fn resolve_binding_count(
     };
 
     if count == 0 { 256 } else { count }
+}
+
+fn resolve_group_binding_count(var: &dashi::BindGroupVariable) -> u32 {
+    let count = var.count;
+
+    if count == 0 { 1 } else { count }
 }
 
 #[derive(Clone)]
@@ -473,6 +479,8 @@ impl GraphicsPipelineBuilder {
                 }
             }
 
+            bindings.sort_by_key(|binding| binding.binding);
+
             if !bindings.is_empty() {
                 let bind_group = ctx
                     .make_bind_group(&BindGroupInfo {
@@ -500,7 +508,8 @@ impl GraphicsPipelineBuilder {
                     continue;
                 }
 
-                let count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                let count =
+                    resolve_table_binding_count(&var.kind, table_variables.get(&var.name));
 
                 if let Some(existing) = combined_vars.get(&var.kind.binding) {
                     if existing.count != count {
@@ -548,7 +557,7 @@ impl GraphicsPipelineBuilder {
                 }
 
                 if let Some(resource) = table_variables.get(&var.name) {
-                    let expected_count = resolve_binding_count(&var.kind, Some(resource));
+                    let expected_count = resolve_table_binding_count(&var.kind, Some(resource));
                     if bound_indices.insert(var.kind.binding) {
                         let (initial_resources, size) = resources_from_config(
                             &mut defaults,
@@ -565,6 +574,8 @@ impl GraphicsPipelineBuilder {
                     }
                 }
             }
+
+            pending_bindings.sort_by_key(|(binding, _)| *binding);
 
             if !pending_bindings.is_empty() {
                 let indexed_bindings: Vec<IndexedBindingInfo> = pending_bindings
@@ -837,6 +848,7 @@ impl ComputePipelineBuilder {
 
         let mut bg_layouts: [Option<Handle<BindGroupLayout>>; 4] = [None; 4];
         let mut bind_groups = Vec::new();
+        let mut defaults = DefaultResources::default();
 
         for set in 0..4u32 {
             let vars: Vec<dashi::BindGroupVariable> = shader
@@ -845,7 +857,7 @@ impl ComputePipelineBuilder {
                 .filter(|var| var.set == set)
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
-                    var_with_count.count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                    var_with_count.count = resolve_group_binding_count(&var.kind);
 
                     var_with_count
                 })
@@ -877,13 +889,19 @@ impl ComputePipelineBuilder {
                     continue;
                 }
 
-                if let Some(res) = variables.get(&var.name) {
+                if let Some(res) = variables
+                    .get(&var.name)
+                    .cloned()
+                    .or_else(|| defaults.get(ctx, var.kind.var_type))
+                {
                     bindings.push(dashi::BindingInfo {
                         binding: var.kind.binding,
-                        resource: res.clone(),
+                        resource: res,
                     });
                 }
             }
+
+            bindings.sort_by_key(|binding| binding.binding);
 
             if !bindings.is_empty() {
                 let bind_group = ctx
@@ -911,7 +929,7 @@ impl ComputePipelineBuilder {
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
                     var_with_count.count =
-                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                        resolve_table_binding_count(&var.kind, table_variables.get(&var.name));
 
                     var_with_count
                 })
@@ -946,7 +964,7 @@ impl ComputePipelineBuilder {
                 }
 
                 if let Some(res) = table_variables.get(&var.name) {
-                    let expected_count = resolve_binding_count(&var.kind, Some(res));
+                    let expected_count = resolve_table_binding_count(&var.kind, Some(res));
                     let (initial_resources, size) =
                         resources_from_config(&mut defaults, ctx, &var.kind, res, expected_count)?;
                     resources.push(initial_resources);
@@ -956,6 +974,8 @@ impl ComputePipelineBuilder {
                     pending_names.push((var.name.clone(), var.kind.binding, size));
                 }
             }
+
+            pending_bindings.sort_by_key(|(binding, _)| *binding);
 
             if !pending_bindings.is_empty() {
                 let indexed_bindings: Vec<IndexedBindingInfo> = pending_bindings
