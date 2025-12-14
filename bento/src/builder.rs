@@ -4,7 +4,14 @@ use std::{
 };
 
 use dashi::{
-    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindGroupVariableType, BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BufferInfo, BufferUsage, BufferView, ComputePipeline, ComputePipelineInfo, ComputePipelineLayout, ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo, SampleCount, SamplerInfo, ShaderInfo, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo
+    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindGroupVariableType,
+    BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BufferInfo, BufferUsage,
+    BufferView, ComputePipeline, ComputePipelineInfo, ComputePipelineLayout,
+    ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline, GraphicsPipelineDetails,
+    GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo,
+    ImageView, IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo,
+    SampleCount, SamplerInfo, ShaderInfo, ShaderResource, ShaderType, VertexDescriptionInfo,
+    VertexEntryInfo,
 };
 
 use crate::{CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang};
@@ -150,27 +157,46 @@ fn resources_from_config(
     ctx: &mut dashi::Context,
     var: &dashi::BindGroupVariable,
     config: &BindTableVariable,
+    expected_count: u32,
 ) -> Option<(Vec<IndexedResource>, u32)> {
     match config {
         BindTableVariable::Empty { size } => {
-            let defaults = default_resources_for_variable(defaults, ctx, var, *size)?;
-            Some((defaults, *size))
-        }
-        BindTableVariable::WithResources { resources } => {
-            if resources.is_empty() {
+            if *size != expected_count {
                 return None;
             }
 
-            let size = resources
-                .iter()
-                .map(|res| res.slot + 1)
-                .max()
-                .unwrap_or(resources.len() as u32)
-                .max(resources.len() as u32);
+            let defaults = default_resources_for_variable(defaults, ctx, var, expected_count)?;
+            Some((defaults, expected_count))
+        }
+        BindTableVariable::WithResources { resources } => {
+            if resources.len() != expected_count as usize {
+                return None;
+            }
 
-            Some((resources.clone(), size))
+            let mut used_slots = HashSet::new();
+            if resources
+                .iter()
+                .any(|res| res.slot >= expected_count || !used_slots.insert(res.slot))
+            {
+                return None;
+            }
+
+            Some((resources.clone(), expected_count))
         }
     }
+}
+
+fn resolve_binding_count(
+    var: &dashi::BindGroupVariable,
+    config: Option<&BindTableVariable>,
+) -> u32 {
+    let count = match config {
+        Some(BindTableVariable::Empty { size }) => *size,
+        Some(BindTableVariable::WithResources { resources }) => resources.len() as u32,
+        None => var.count,
+    };
+
+    if count == 0 { 256 } else { count }
 }
 
 #[derive(Clone)]
@@ -474,9 +500,17 @@ impl GraphicsPipelineBuilder {
                     continue;
                 }
 
-                combined_vars
-                    .entry(var.kind.binding)
-                    .or_insert_with(|| var.kind.clone());
+                let count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+
+                if let Some(existing) = combined_vars.get(&var.kind.binding) {
+                    if existing.count != count {
+                        return None;
+                    }
+                } else {
+                    let mut var_with_count = var.kind.clone();
+                    var_with_count.count = count;
+                    combined_vars.insert(var.kind.binding, var_with_count);
+                }
             }
 
             if combined_vars.is_empty() {
@@ -514,16 +548,20 @@ impl GraphicsPipelineBuilder {
                 }
 
                 if let Some(resource) = table_variables.get(&var.name) {
+                    let expected_count = resolve_binding_count(&var.kind, Some(resource));
                     if bound_indices.insert(var.kind.binding) {
-                        if let Some((initial_resources, size)) =
-                            resources_from_config(&mut defaults, ctx, &var.kind, resource)
-                        {
-                            resources.push(initial_resources);
-                            let resource_index = resources.len() - 1;
+                        let (initial_resources, size) = resources_from_config(
+                            &mut defaults,
+                            ctx,
+                            &var.kind,
+                            resource,
+                            expected_count,
+                        )?;
+                        resources.push(initial_resources);
+                        let resource_index = resources.len() - 1;
 
-                            pending_bindings.push((var.kind.binding, resource_index));
-                            pending_names.push((var.name.clone(), var.kind.binding, size));
-                        }
+                        pending_bindings.push((var.kind.binding, resource_index));
+                        pending_names.push((var.name.clone(), var.kind.binding, size));
                     }
                 }
             }
@@ -805,7 +843,12 @@ impl ComputePipelineBuilder {
                 .variables
                 .iter()
                 .filter(|var| var.set == set)
-                .map(|var| var.kind.clone())
+                .map(|var| {
+                    let mut var_with_count = var.kind.clone();
+                    var_with_count.count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+
+                    var_with_count
+                })
                 .collect();
 
             if vars.is_empty() {
@@ -865,7 +908,13 @@ impl ComputePipelineBuilder {
                 .variables
                 .iter()
                 .filter(|var| var.set == set)
-                .map(|var| var.kind.clone())
+                .map(|var| {
+                    let mut var_with_count = var.kind.clone();
+                    var_with_count.count =
+                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
+
+                    var_with_count
+                })
                 .collect();
 
             if vars.is_empty() {
@@ -897,15 +946,14 @@ impl ComputePipelineBuilder {
                 }
 
                 if let Some(res) = table_variables.get(&var.name) {
-                    if let Some((initial_resources, size)) =
-                        resources_from_config(&mut defaults, ctx, &var.kind, res)
-                    {
-                        resources.push(initial_resources);
-                        let resource_index = resources.len() - 1;
+                    let expected_count = resolve_binding_count(&var.kind, Some(res));
+                    let (initial_resources, size) =
+                        resources_from_config(&mut defaults, ctx, &var.kind, res, expected_count)?;
+                    resources.push(initial_resources);
+                    let resource_index = resources.len() - 1;
 
-                        pending_bindings.push((var.kind.binding, resource_index));
-                        pending_names.push((var.name.clone(), var.kind.binding, size));
-                    }
+                    pending_bindings.push((var.kind.binding, resource_index));
+                    pending_names.push((var.name.clone(), var.kind.binding, size));
                 }
             }
 
