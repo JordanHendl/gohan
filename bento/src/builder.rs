@@ -473,6 +473,8 @@ impl GraphicsPipelineBuilder {
                 }
             }
 
+            bindings.sort_by_key(|binding| binding.binding);
+
             if !bindings.is_empty() {
                 let bind_group = ctx
                     .make_bind_group(&BindGroupInfo {
@@ -565,6 +567,8 @@ impl GraphicsPipelineBuilder {
                     }
                 }
             }
+
+            pending_bindings.sort_by_key(|(binding, _)| *binding);
 
             if !pending_bindings.is_empty() {
                 let indexed_bindings: Vec<IndexedBindingInfo> = pending_bindings
@@ -845,7 +849,8 @@ impl ComputePipelineBuilder {
                 .filter(|var| var.set == set)
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
-                    var_with_count.count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                    var_with_count.count =
+                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
 
                     var_with_count
                 })
@@ -884,6 +889,8 @@ impl ComputePipelineBuilder {
                     });
                 }
             }
+
+            bindings.sort_by_key(|binding| binding.binding);
 
             if !bindings.is_empty() {
                 let bind_group = ctx
@@ -956,6 +963,8 @@ impl ComputePipelineBuilder {
                     pending_names.push((var.name.clone(), var.kind.binding, size));
                 }
             }
+
+            pending_bindings.sort_by_key(|(binding, _)| *binding);
 
             if !pending_bindings.is_empty() {
                 let indexed_bindings: Vec<IndexedBindingInfo> = pending_bindings
