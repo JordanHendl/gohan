@@ -69,6 +69,28 @@ void main() {
 }
 "#;
 
+const COMPUTE_TABLE_SINGLE: &str = r#"
+#version 450
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 0) buffer Data {
+    uint value;
+} data;
+void main() {
+    data.value = 1;
+}
+"#;
+
+const GRAPHICS_FRAGMENT_STORAGE: &str = r#"
+#version 450
+layout(set = 0, binding = 0) buffer Data {
+    float value;
+} data;
+layout(location = 0) out vec4 color;
+void main() {
+    color = vec4(data.value, 0.0, 0.0, 1.0);
+}
+"#;
+
 struct ValidationContext {
     ctx: Option<Context>,
     guard: Option<ValidationGuard>,
@@ -370,6 +392,96 @@ fn builds_compute_pipeline_with_initial_table_resources() {
 
 #[test]
 #[serial]
+fn compute_table_count_can_be_overridden_with_resources_length() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+    let compute_stage = compile_shader(dashi::ShaderType::Compute, COMPUTE_TABLE_SINGLE);
+    let data_name = compute_stage
+        .variables
+        .iter()
+        .find(|var| var.kind.binding == 0 && var.set == 0)
+        .map(|var| var.name.clone())
+        .expect("data variable name");
+
+    let first = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "override_first",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("first override buffer"),
+    );
+    let second = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "override_second",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("second override buffer"),
+    );
+
+    let pipeline = ComputePipelineBuilder::new()
+        .shader_compiled(Some(compute_stage))
+        .add_table_variable_with_resources(
+            &data_name,
+            vec![
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(first),
+                    slot: 0,
+                },
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(second),
+                    slot: 1,
+                },
+            ],
+        )
+        .build(&mut ctx);
+
+    assert!(pipeline.is_some());
+}
+
+#[test]
+#[serial]
+fn compute_table_rejects_out_of_range_slots() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+    let compute_stage = compile_shader(dashi::ShaderType::Compute, COMPUTE_TABLE_SINGLE);
+    let data_name = compute_stage
+        .variables
+        .iter()
+        .find(|var| var.kind.binding == 0 && var.set == 0)
+        .map(|var| var.name.clone())
+        .expect("data variable name");
+
+    let invalid = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "invalid_slot",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("invalid buffer"),
+    );
+
+    let pipeline = ComputePipelineBuilder::new()
+        .shader_compiled(Some(compute_stage))
+        .add_table_variable_with_resources(
+            &data_name,
+            vec![IndexedResource {
+                resource: ShaderResource::StorageBuffer(invalid),
+                slot: 2,
+            }],
+        )
+        .build(&mut ctx);
+
+    assert!(pipeline.is_none());
+}
+
+#[test]
+#[serial]
 fn builds_graphics_pipeline_without_resources() {
     let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
 
@@ -410,4 +522,114 @@ fn builds_graphics_pipeline_with_shared_uniform_bindings() {
         .build(&mut ctx);
 
     assert!(pipeline.is_some());
+}
+
+#[test]
+#[serial]
+fn graphics_table_count_can_be_overridden() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+
+    let vertex = compile_shader(dashi::ShaderType::Vertex, GRAPHICS_VERTEX_SIMPLE);
+    let fragment = compile_shader(dashi::ShaderType::Fragment, GRAPHICS_FRAGMENT_STORAGE);
+    let data_name = fragment
+        .variables
+        .iter()
+        .find(|var| var.kind.binding == 0 && var.set == 0)
+        .map(|var| var.name.clone())
+        .expect("data variable name");
+
+    let first = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "graphics_override_first",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("graphics override buffer"),
+    );
+    let second = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "graphics_override_second",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("graphics second override buffer"),
+    );
+    let third = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "graphics_override_third",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("graphics third override buffer"),
+    );
+
+    let pipeline = GraphicsPipelineBuilder::new()
+        .vertex_compiled(Some(vertex))
+        .fragment_compiled(Some(fragment))
+        .add_table_variable_with_resources(
+            &data_name,
+            vec![
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(first),
+                    slot: 0,
+                },
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(second),
+                    slot: 1,
+                },
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(third),
+                    slot: 2,
+                },
+            ],
+        )
+        .build(&mut ctx);
+
+    assert!(pipeline.is_some());
+}
+
+#[test]
+#[serial]
+fn graphics_table_rejects_out_of_range_slots() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+
+    let vertex = compile_shader(dashi::ShaderType::Vertex, GRAPHICS_VERTEX_SIMPLE);
+    let fragment = compile_shader(dashi::ShaderType::Fragment, GRAPHICS_FRAGMENT_STORAGE);
+    let data_name = fragment
+        .variables
+        .iter()
+        .find(|var| var.kind.binding == 0 && var.set == 0)
+        .map(|var| var.name.clone())
+        .expect("data variable name");
+
+    let invalid = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "graphics_invalid_slot",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("graphics invalid buffer"),
+    );
+
+    let pipeline = GraphicsPipelineBuilder::new()
+        .vertex_compiled(Some(vertex))
+        .fragment_compiled(Some(fragment))
+        .add_table_variable_with_resources(
+            &data_name,
+            vec![IndexedResource {
+                resource: ShaderResource::StorageBuffer(invalid),
+                slot: 4,
+            }],
+        )
+        .build(&mut ctx);
+
+    assert!(pipeline.is_none());
 }
