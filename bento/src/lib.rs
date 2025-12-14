@@ -653,11 +653,8 @@ fn parse_source_bindings(source: &str, lang: ShaderLang) -> Result<Vec<SourceBin
 }
 
 fn parse_glsl_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
-    let regex =
-        Regex::new(r"layout\s*\(\s*set\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\)\s*([^;]+);")
-            .map_err(|e| {
-                BentoError::ShaderCompilation(format!("Invalid GLSL reflection regex: {e}"))
-            })?;
+    let regex = Regex::new(r"layout\s*\(\s*set\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\)")
+        .map_err(|e| BentoError::ShaderCompilation(format!("Invalid GLSL reflection regex: {e}")))?;
 
     Ok(regex
         .captures_iter(source)
@@ -669,9 +666,10 @@ fn parse_glsl_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
             let binding = captures
                 .get(2)
                 .and_then(|m| m.as_str().parse::<u32>().ok())?;
-            let declaration = captures.get(3).map(|m| m.as_str()).unwrap_or("");
+            let declaration_start = captures.get(0).map(|m| m.end())?;
+            let declaration = glsl_declaration_from(source, declaration_start)?;
 
-            let name = extract_name(declaration)?;
+            let name = extract_binding_name(&declaration)?;
 
             Some(SourceBinding {
                 set,
@@ -683,9 +681,45 @@ fn parse_glsl_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
         .collect())
 }
 
+fn glsl_declaration_from(source: &str, start: usize) -> Option<String> {
+    let mut offset = start;
+    let bytes = source.as_bytes();
+
+    while let Some(b) = bytes.get(offset) {
+        if b.is_ascii_whitespace() {
+            offset += 1;
+            continue;
+        }
+
+        break;
+    }
+
+    let mut depth: i32 = 0;
+    let mut index = offset;
+
+    while let Some(&byte) = bytes.get(index) {
+        match byte as char {
+            '{' => depth += 1,
+            '}' => {
+                if depth > 0 {
+                    depth -= 1;
+                }
+            }
+            ';' if depth == 0 => {
+                return Some(source[offset..index].trim().to_string());
+            }
+            _ => {}
+        }
+
+        index += 1;
+    }
+
+    None
+}
+
 fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
     let resource_regex = Regex::new(
-        r"(?m)^\s*(?:RW?Texture\w+|RW?StructuredBuffer|StructuredBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|AccelerationStructure|Texture\w+|Sampler\w*)[^;\n]*?\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*[tubcs]?\s*(\d+)\s*\))?",
+        r"(?m)^\s*(?:RW?Texture\w+|RW?StructuredBuffer|StructuredBuffer|ConstantBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|AccelerationStructure|Texture\w+|Sampler\w*)[^;\n]*?\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*([tubcs]?)\s*(\d+)\s*\))?",
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid HLSL reflection regex: {e}")))?;
 
@@ -694,36 +728,119 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid constant buffer regex: {e}")))?;
 
-    let mut bindings = Vec::new();
+    #[derive(Clone, Copy, Eq, PartialEq)]
+    enum RegisterType {
+        Texture,
+        CBuffer,
+        Storage,
+        Sampler,
+    }
+
+    fn register_priority(register_type: RegisterType) -> u8 {
+        match register_type {
+            RegisterType::Texture => 0,
+            RegisterType::CBuffer => 1,
+            RegisterType::Storage => 2,
+            RegisterType::Sampler => 3,
+        }
+    }
+
+    fn classify_register(declaration: &str, register_letter: Option<char>) -> RegisterType {
+        match register_letter {
+            Some('t') => RegisterType::Texture,
+            Some('b') => RegisterType::CBuffer,
+            Some('u') => RegisterType::Storage,
+            Some('s') => RegisterType::Sampler,
+            _ => {
+                let lower = declaration.to_ascii_lowercase();
+
+                if lower.contains("sampler") {
+                    RegisterType::Sampler
+                } else if lower.contains("cbuffer") || lower.contains("constantbuffer") {
+                    RegisterType::CBuffer
+                } else if lower.contains("byteaddressbuffer") || lower.contains("rw") {
+                    RegisterType::Storage
+                } else {
+                    RegisterType::Texture
+                }
+            }
+        }
+    }
+
+    struct ParsedBinding {
+        name: String,
+        set: u32,
+        order: usize,
+        register_index: Option<u32>,
+        register_type: RegisterType,
+    }
+
+    let mut parsed_bindings = Vec::new();
 
     for (index, captures) in resource_regex.captures_iter(source).enumerate() {
+        let Some(declaration_match) = captures.get(0) else {
+            continue;
+        };
         let name = captures
             .get(1)
             .map(|m| m.as_str().to_string())
             .unwrap_or_else(|| format!("resource_{index}"));
-        let binding = captures.get(2).and_then(|m| m.as_str().parse::<u32>().ok());
+        let register_letter = captures
+            .get(2)
+            .and_then(|m| m.as_str().chars().next())
+            .filter(|c| c.is_ascii_alphabetic());
+        let register_index = captures.get(3).and_then(|m| m.as_str().parse::<u32>().ok());
+        let register_type = classify_register(declaration_match.as_str(), register_letter);
 
-        bindings.push(SourceBinding {
-            set: 0,
-            binding,
+        parsed_bindings.push(ParsedBinding {
             name,
+            set: 0,
             order: index,
+            register_index,
+            register_type,
         });
     }
 
-    let starting_index = bindings.len();
+    let starting_index = parsed_bindings.len();
     for (offset, captures) in cbuffer_regex.captures_iter(source).enumerate() {
-        let name = captures
+        let fallback_name = captures
             .get(1)
             .map(|m| m.as_str().to_string())
             .unwrap_or_else(|| format!("cbuffer_{offset}"));
-        let binding = captures.get(2).and_then(|m| m.as_str().parse::<u32>().ok());
+        let Some(declaration_match) = captures.get(0) else {
+            continue;
+        };
+        let declaration = declaration_match.as_str();
+        let name = extract_binding_name(declaration).unwrap_or(fallback_name);
+        let register_index = captures.get(2).and_then(|m| m.as_str().parse::<u32>().ok());
 
-        bindings.push(SourceBinding {
-            set: 0,
-            binding,
+        parsed_bindings.push(ParsedBinding {
             name,
+            set: 0,
             order: starting_index + offset,
+            register_index,
+            register_type: RegisterType::CBuffer,
+        });
+    }
+
+    parsed_bindings.sort_by(|a, b| {
+        register_priority(a.register_type)
+            .cmp(&register_priority(b.register_type))
+            .then_with(|| {
+                a.register_index
+                    .unwrap_or(u32::MAX)
+                    .cmp(&b.register_index.unwrap_or(u32::MAX))
+            })
+            .then_with(|| a.order.cmp(&b.order))
+    });
+
+    let mut bindings = Vec::new();
+    for (binding_index, parsed) in parsed_bindings.iter().enumerate() {
+        bindings.push(SourceBinding {
+            set: parsed.set,
+            binding: Some(binding_index as u32),
+            name: parsed.name.clone(),
+            order: parsed.order,
         });
     }
 
@@ -750,10 +867,51 @@ fn take_source_name(set: u32, binding: u32, sources: &mut Vec<SourceBinding>) ->
     None
 }
 
-fn extract_name(declaration: &str) -> Option<String> {
-    let name_regex = Regex::new(r"([A-Za-z_][A-Za-z0-9_]*)\s*(?:\[\s*\d*\s*\])?\s*$").ok()?;
-    let captures = name_regex.captures(declaration)?;
-    captures.get(1).map(|m| m.as_str().to_string())
+fn extract_binding_name(declaration: &str) -> Option<String> {
+    fn first_identifier(segment: &str) -> Option<String> {
+        let regex = Regex::new(r"[A-Za-z_][A-Za-z0-9_]*").ok()?;
+        regex
+            .find(segment)
+            .map(|m| m.as_str().to_string())
+    }
+
+    fn last_identifier(segment: &str) -> Option<String> {
+        let regex = Regex::new(r"[A-Za-z_][A-Za-z0-9_]*").ok()?;
+        regex
+            .find_iter(segment)
+            .last()
+            .map(|m| m.as_str().to_string())
+    }
+
+    let trimmed = declaration.trim();
+
+    if trimmed.contains('{') {
+        let before_brace = trimmed
+            .split('{')
+            .next()
+            .unwrap_or("")
+            .split(':')
+            .next()
+            .unwrap_or("");
+        if trimmed.contains('}') {
+            let after_brace = trimmed
+                .rsplit('}')
+                .next()
+                .unwrap_or("")
+                .split(':')
+                .next()
+                .unwrap_or("");
+
+            if let Some(name) = first_identifier(after_brace) {
+                return Some(name);
+            }
+        }
+
+        return last_identifier(before_brace);
+    }
+
+    let segment = trimmed.split(':').next().unwrap_or(trimmed);
+    last_identifier(segment)
 }
 
 fn reflect_metadata(spirv_bytes: &[u8]) -> Result<ShaderMetadata, BentoError> {
@@ -1034,6 +1192,7 @@ fn primitive_size(format: dashi::ShaderPrimitiveType) -> usize {
 mod tests {
     use super::*;
     use std::{
+        collections::HashMap,
         fs,
         time::{SystemTime, UNIX_EPOCH},
     };
@@ -1182,6 +1341,59 @@ mod tests {
         let err = compiler.compile(shader, &request).unwrap_err();
 
         assert!(matches!(err, BentoError::ShaderCompilation(_)));
+    }
+
+    #[test]
+    fn glsl_prefers_instance_name_over_block_type() -> Result<(), BentoError> {
+        let source = r#"
+layout(set = 0, binding = 5) uniform SceneCamera {
+    uint slot;
+} camera;
+
+layout(set = 0, binding = 6) uniform SceneCamera {
+    uint slot;
+};
+"#;
+
+        let bindings = parse_glsl_bindings(source)?;
+        let mut names_by_binding = HashMap::new();
+        for binding in bindings {
+            names_by_binding.insert(binding.binding.unwrap_or_default(), binding.name);
+        }
+
+        assert_eq!(names_by_binding.get(&5), Some(&"camera".to_string()));
+        assert_eq!(
+            names_by_binding.get(&6),
+            Some(&"SceneCamera".to_string())
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn hlsl_uses_block_name_when_no_instance_is_present() -> Result<(), BentoError> {
+        let source = r#"
+cbuffer SceneCamera : register(b5)
+{
+    uint slot;
+};
+
+ConstantBuffer<SceneCamera> camera : register(b6);
+"#;
+
+        let bindings = parse_hlsl_like_bindings(source)?;
+        let mut names_by_binding = HashMap::new();
+        for binding in bindings {
+            names_by_binding.insert(binding.binding.unwrap_or_default(), binding.name);
+        }
+
+        assert_eq!(names_by_binding.get(&0), Some(&"camera".to_string()));
+        assert_eq!(
+            names_by_binding.get(&1),
+            Some(&"SceneCamera".to_string())
+        );
+
+        Ok(())
     }
 
     #[test]
