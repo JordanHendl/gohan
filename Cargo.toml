@@ -2,6 +2,6 @@
 resolver = "3"
 members = ["miso", "furikake", "tare", "bento"]
 
-[profile.dev.package."*"]
-debug = false
+#[profile.dev.package."*"]
+#debug = false
 

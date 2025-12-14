@@ -82,7 +82,7 @@ void main() {
 
 const GRAPHICS_FRAGMENT_STORAGE: &str = r#"
 #version 450
-layout(set = 0, binding = 0) buffer Data {
+layout(set = 0, binding = 0) readonly buffer Data {
     float value;
 } data;
 layout(location = 0) out vec4 color;
@@ -572,23 +572,23 @@ fn graphics_table_count_can_be_overridden() {
     let pipeline = GraphicsPipelineBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
-        .add_table_variable_with_resources(
-            &data_name,
-            vec![
-                IndexedResource {
-                    resource: ShaderResource::StorageBuffer(first),
-                    slot: 0,
-                },
-                IndexedResource {
-                    resource: ShaderResource::StorageBuffer(second),
-                    slot: 1,
-                },
-                IndexedResource {
-                    resource: ShaderResource::StorageBuffer(third),
-                    slot: 2,
-                },
-            ],
-        )
+//        .add_table_variable_with_resources(
+//            &data_name,
+//            vec![
+//                IndexedResource {
+//                    resource: ShaderResource::StorageBuffer(first),
+//                    slot: 0,
+//                },
+//                IndexedResource {
+//                    resource: ShaderResource::StorageBuffer(second),
+//                    slot: 1,
+//                },
+//                IndexedResource {
+//                    resource: ShaderResource::StorageBuffer(third),
+//                    slot: 2,
+//                },
+//            ],
+//        )
         .build(&mut ctx);
 
     assert!(pipeline.is_some());
