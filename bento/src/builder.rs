@@ -878,6 +878,7 @@ impl ComputePipelineBuilder {
                 }
 
                 if let Some(res) = variables.get(&var.name) {
+                    println!("res: {}", var.name);
                     bindings.push(dashi::BindingInfo {
                         binding: var.kind.binding,
                         resource: res.clone(),
@@ -946,6 +947,7 @@ impl ComputePipelineBuilder {
                 }
 
                 if let Some(res) = table_variables.get(&var.name) {
+                    println!("res2: {}", var.name);
                     let expected_count = resolve_binding_count(&var.kind, Some(res));
                     let (initial_resources, size) =
                         resources_from_config(&mut defaults, ctx, &var.kind, res, expected_count)?;
