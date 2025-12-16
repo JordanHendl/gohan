@@ -878,7 +878,6 @@ impl ComputePipelineBuilder {
                 }
 
                 if let Some(res) = variables.get(&var.name) {
-                    println!("res: {}", var.name);
                     bindings.push(dashi::BindingInfo {
                         binding: var.kind.binding,
                         resource: res.clone(),
@@ -887,6 +886,7 @@ impl ComputePipelineBuilder {
             }
 
             if !bindings.is_empty() {
+                
                 let bind_group = ctx
                     .make_bind_group(&BindGroupInfo {
                         debug_name: "bento_compute_bind_group",
