@@ -183,6 +183,13 @@ fn resources_from_config(
 
             Some((resources.clone(), expected_count))
         }
+        BindTableVariable::Binding { resource } => Some((
+            vec![IndexedResource {
+                resource: resource.clone(),
+                slot: 0,
+            }],
+            1,
+        )),
     }
 }
 
@@ -191,6 +198,7 @@ fn resolve_binding_count(
     config: Option<&BindTableVariable>,
 ) -> u32 {
     let count = match config {
+        Some(BindTableVariable::Binding { resource: _ }) => 1,
         Some(BindTableVariable::Empty { size }) => *size,
         Some(BindTableVariable::WithResources { resources }) => resources.len() as u32,
         None => var.count,
@@ -203,7 +211,6 @@ fn resolve_binding_count(
 pub struct PSO {
     pub layout: Handle<GraphicsPipelineLayout>,
     pub handle: Handle<GraphicsPipeline>,
-    pub bind_groups: Vec<Handle<BindGroup>>,
     pub bind_table: Vec<Handle<BindTable>>,
     pub ctx: NonNull<Context>,
     table_bindings: HashMap<String, TableBinding>,
@@ -252,13 +259,13 @@ struct TableBinding {
 #[derive(Clone)]
 pub enum BindTableVariable {
     Empty { size: u32 },
+    Binding { resource: ShaderResource },
     WithResources { resources: Vec<IndexedResource> },
 }
 
 pub struct GraphicsPipelineBuilder {
     vertex: Option<CompilationResult>,
     fragment: Option<CompilationResult>,
-    variables: HashMap<String, ShaderResource>,
     table_variables: HashMap<String, BindTableVariable>,
     details: GraphicsPipelineDetails,
 }
@@ -268,7 +275,6 @@ impl GraphicsPipelineBuilder {
         Self {
             vertex: None,
             fragment: None,
-            variables: HashMap::new(),
             table_variables: HashMap::new(),
             details: GraphicsPipelineDetails::default(),
         }
@@ -352,10 +358,16 @@ impl GraphicsPipelineBuilder {
     }
 
     pub fn add_variable(self, key: &str, variable: ShaderResource) -> Self {
-        let mut variables = self.variables;
-        variables.insert(key.to_string(), variable);
+        let mut table_variables = self.table_variables;
+        table_variables.insert(
+            key.to_string(),
+            BindTableVariable::Binding { resource: variable },
+        );
 
-        Self { variables, ..self }
+        Self {
+            table_variables,
+            ..self
+        }
     }
 
     pub fn set_details(self, details: GraphicsPipelineDetails) -> Self {
@@ -366,7 +378,6 @@ impl GraphicsPipelineBuilder {
         let GraphicsPipelineBuilder {
             vertex,
             fragment,
-            variables,
             table_variables,
             details,
         } = self;
@@ -375,8 +386,7 @@ impl GraphicsPipelineBuilder {
         let fragment = fragment?;
 
         // Build bind group layouts for up to 4 sets.
-        let mut bg_layouts: [Option<Handle<BindGroupLayout>>; 4] = [None; 4];
-        let mut bind_groups = Vec::new();
+        let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None; 4];
 
         for set in 0..4u32 {
             let mut merged_vars: HashMap<
@@ -449,40 +459,6 @@ impl GraphicsPipelineBuilder {
 
             if shader_infos.is_empty() {
                 continue;
-            }
-
-            let layout = ctx
-                .make_bind_group_layout(&BindGroupLayoutInfo {
-                    debug_name: "bento_bg_layout",
-                    shaders: shader_infos.as_slice(),
-                })
-                .ok()?;
-
-            if (set as usize) < bg_layouts.len() {
-                bg_layouts[set as usize] = Some(layout);
-            }
-
-            // Build bind group if resources were provided.
-            let mut bindings = Vec::new();
-            for (_, (var, _, names)) in merged_vars.iter() {
-                if let Some(res) = names.iter().find_map(|name| variables.get(name)) {
-                    bindings.push(dashi::BindingInfo {
-                        binding: var.binding,
-                        resource: res.clone(),
-                    });
-                }
-            }
-
-            if !bindings.is_empty() {
-                let bind_group = ctx
-                    .make_bind_group(&BindGroupInfo {
-                        debug_name: "bento_bind_group",
-                        layout,
-                        bindings: bindings.as_slice(),
-                        set,
-                    })
-                    .ok()?;
-                bind_groups.push(bind_group);
             }
         }
 
@@ -647,10 +623,10 @@ impl GraphicsPipelineBuilder {
             .make_graphics_pipeline_layout(&GraphicsPipelineLayoutInfo {
                 debug_name: "bento_graphics_layout",
                 vertex_info,
-                bg_layouts,
                 bt_layouts,
                 shaders: shader_infos.as_slice(),
                 details,
+                bg_layouts: Default::default(),
             })
             .ok()?;
 
@@ -668,7 +644,6 @@ impl GraphicsPipelineBuilder {
         Some(PSO {
             layout,
             handle: pipeline,
-            bind_groups,
             bind_table: bind_tables,
             table_bindings,
             ctx: NonNull::from(ctx),
@@ -683,7 +658,6 @@ impl GraphicsPipelineBuilder {
 pub struct CSO {
     pub layout: Handle<ComputePipelineLayout>,
     pub handle: Handle<ComputePipeline>,
-    pub bind_groups: Vec<Handle<BindGroup>>,
     pub bind_table: Vec<Handle<BindTable>>,
     pub ctx: NonNull<Context>,
     table_bindings: HashMap<String, TableBinding>,
@@ -718,15 +692,6 @@ impl CSO {
         });
     }
 
-    pub fn bindings(&self) -> [Option<Handle<BindGroup>>; 4] {
-        let mut out: [Option<Handle<BindGroup>>; 4] = [None; 4];
-        for (i, x) in self.bind_groups.iter().take(4).enumerate() {
-            out[i] = Some(*x);
-        }
-
-        out
-    }
-
     pub fn tables(&self) -> [Option<Handle<BindTable>>; 4] {
         let mut out: [Option<Handle<BindTable>>; 4] = [None; 4];
         for (i, x) in self.bind_table.iter().take(4).enumerate() {
@@ -738,7 +703,6 @@ impl CSO {
 }
 pub struct ComputePipelineBuilder {
     shader: Option<CompilationResult>,
-    variables: HashMap<String, ShaderResource>,
     table_variables: HashMap<String, BindTableVariable>,
 }
 
@@ -746,7 +710,6 @@ impl ComputePipelineBuilder {
     pub fn new() -> Self {
         Self {
             shader: None,
-            variables: HashMap::new(),
             table_variables: HashMap::new(),
         }
     }
@@ -819,24 +782,26 @@ impl ComputePipelineBuilder {
     // Adds a variable to this builder. The variable name is used to match the binding up with the
     // shader source bindings.
     pub fn add_variable(self, key: &str, variable: ShaderResource) -> Self {
-        let mut variables = self.variables;
-        variables.insert(key.to_string(), variable);
+        let mut table_variables = self.table_variables;
+        table_variables.insert(
+            key.to_string(),
+            BindTableVariable::Binding { resource: variable },
+        );
 
-        Self { variables, ..self }
+        Self {
+            table_variables,
+            ..self
+        }
     }
 
     // Will fail if shaders are not given, or if variables given do not
     pub fn build(self, ctx: &mut dashi::Context) -> Option<CSO> {
         let ComputePipelineBuilder {
             shader,
-            variables,
             table_variables,
         } = self;
 
         let shader = shader?;
-
-        let mut bg_layouts: [Option<Handle<BindGroupLayout>>; 4] = [None; 4];
-        let mut bind_groups = Vec::new();
 
         for set in 0..4u32 {
             let vars: Vec<dashi::BindGroupVariable> = shader
@@ -845,7 +810,8 @@ impl ComputePipelineBuilder {
                 .filter(|var| var.set == set)
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
-                    var_with_count.count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                    var_with_count.count =
+                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
 
                     var_with_count
                 })
@@ -853,49 +819,6 @@ impl ComputePipelineBuilder {
 
             if vars.is_empty() {
                 continue;
-            }
-
-            let shader_info = ShaderInfo {
-                shader_type: shader.stage,
-                variables: vars.as_slice(),
-            };
-
-            let layout = ctx
-                .make_bind_group_layout(&BindGroupLayoutInfo {
-                    debug_name: "bento_compute_bg_layout",
-                    shaders: std::slice::from_ref(&shader_info),
-                })
-                .ok()?;
-
-            if (set as usize) < bg_layouts.len() {
-                bg_layouts[set as usize] = Some(layout);
-            }
-
-            let mut bindings = Vec::new();
-            for var in shader.variables.iter() {
-                if var.set != set {
-                    continue;
-                }
-
-                if let Some(res) = variables.get(&var.name) {
-                    bindings.push(dashi::BindingInfo {
-                        binding: var.kind.binding,
-                        resource: res.clone(),
-                    });
-                }
-            }
-
-            if !bindings.is_empty() {
-                
-                let bind_group = ctx
-                    .make_bind_group(&BindGroupInfo {
-                        debug_name: "bento_compute_bind_group",
-                        layout,
-                        bindings: bindings.as_slice(),
-                        set,
-                    })
-                    .ok()?;
-                bind_groups.push(bind_group);
             }
         }
 
@@ -998,8 +921,8 @@ impl ComputePipelineBuilder {
 
         let layout = ctx
             .make_compute_pipeline_layout(&ComputePipelineLayoutInfo {
-                bg_layouts,
                 bt_layouts,
+                bg_layouts: Default::default(),
                 shader: &shader_info,
             })
             .ok()?;
@@ -1014,7 +937,6 @@ impl ComputePipelineBuilder {
         Some(CSO {
             layout,
             handle: pipeline,
-            bind_groups,
             bind_table: bind_tables,
             table_bindings,
             ctx: NonNull::from(ctx),
