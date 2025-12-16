@@ -2,11 +2,13 @@
 
 use std::ptr::NonNull;
 
-use dashi::{BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource};
+use dashi::{
+    BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource,
+};
 
 use crate::types::Camera;
 
-use super::{ReservedBinding, ReservedItem};
+use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessCamera {
     ctx: NonNull<Context>,
@@ -121,8 +123,8 @@ impl ReservedItem for ReservedBindlessCamera {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        return ReservedBinding::BindlessBinding(IndexedBindingInfo {
+    fn binding(&self) -> ReservedBinding {
+        return table_binding_from_indexed(IndexedBindingInfo {
             resources: &self.device_camera_data,
             binding: 0,
         });

@@ -11,7 +11,7 @@ This example exercises every reserved item exposed by the **bindless**
 
 It compiles a compute shader that references all of these bindings, validates
 that the shader matches the expected reservation metadata, mutates host-side
-bindless data, and then builds the required bind group and bind tables from a
+bindless data, and then builds the required bind tables from a
 `RecipeBook`.
 
 ## Running
@@ -113,7 +113,7 @@ state
 state.update().expect("refresh bindless texture table");
 ```
 
-### Build bind groups/tables after runtime edits
+### Build bind tables after runtime edits
 
 Bind groups and bind tables can be built after you have finished mutating the
 bindless data. This mirrors a frame where you write CPU-side structures first
@@ -129,7 +129,7 @@ let book = RecipeBook::new(&mut ctx, &state, &[shader])
 let (mut bg_recipes, mut bt_recipes) = book.recipes();
 
 for mut recipe in bg_recipes.drain(..) {
-    let _bind_group = recipe.cook(&mut ctx).expect("cook bind group");
+    let _bind_table = recipe.cook(&mut ctx).expect("cook bind table");
 }
 for mut recipe in bt_recipes.drain(..) {
     let _bind_table = recipe.cook(&mut ctx).expect("cook bind table");

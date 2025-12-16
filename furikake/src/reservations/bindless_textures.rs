@@ -9,7 +9,7 @@ use dashi::{
 
 use crate::types::Texture;
 
-use super::{ReservedBinding, ReservedItem};
+use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 struct DefaultData {
     img: ImageView,
@@ -157,8 +157,8 @@ impl ReservedItem for ReservedBindlessTextures {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        ReservedBinding::BindlessBinding(IndexedBindingInfo {
+    fn binding(&self) -> ReservedBinding {
+        table_binding_from_indexed(IndexedBindingInfo {
             resources: &self.device_texture_data,
             binding: 0,
         })

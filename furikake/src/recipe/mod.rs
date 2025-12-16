@@ -1,29 +1,17 @@
 use bento::CompilationResult;
-use dashi::builders::{BindGroupLayoutBuilder, BindTableLayoutBuilder};
+use dashi::builders::BindTableLayoutBuilder;
 use dashi::{
-    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupVariable, BindTable, BindTableInfo,
-    BindTableLayout, BindingInfo, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderInfo,
+    BindGroupVariable, BindTable, BindTableInfo, BindTableLayout, Context, Handle,
+    IndexedBindingInfo, IndexedResource, ShaderInfo,
 };
 use std::collections::HashMap;
 
 use crate::{GPUState, error::FurikakeError, reservations::ReservedBinding, resolver::Resolver};
 
 #[derive(Debug, Clone)]
-pub struct BindingRecipe {
-    pub binding: Option<BindingInfo>,
-    pub var: bento::ShaderVariable,
-}
-
-#[derive(Debug, Clone)]
 pub struct IndexedBindingRecipe {
     pub bindings: Option<Vec<IndexedResource>>,
     pub var: bento::ShaderVariable,
-}
-
-#[derive(Debug, Clone)]
-pub struct BindGroupRecipe {
-    pub bindings: Vec<BindingRecipe>,
-    pub layout: Handle<BindGroupLayout>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,32 +21,7 @@ pub struct BindTableRecipe {
 }
 
 pub struct RecipeBook {
-    bg_recipes: Vec<BindGroupRecipe>,
-    bt_recipes: Vec<BindTableRecipe>,
-}
-
-impl BindGroupRecipe {
-    pub fn cook(&mut self, ctx: &mut Context) -> Result<Handle<BindGroup>, FurikakeError> {
-        let mut bindings: Vec<BindingInfo> = Vec::with_capacity(self.bindings.len());
-
-        for recipe in &mut self.bindings {
-            bindings.push(recipe.binding.take().ok_or_else(|| {
-                FurikakeError::MissingReservedBinding {
-                    name: recipe.var.name.clone(),
-                }
-            })?);
-        }
-
-        let set = self.bindings.first().map(|b| b.var.set).unwrap_or_default();
-
-        ctx.make_bind_group(&BindGroupInfo {
-            debug_name: "[FURIKAKE] Bind Group",
-            layout: self.layout,
-            bindings: &bindings,
-            set,
-        })
-        .map_err(FurikakeError::from)
-    }
+    recipes: Vec<BindTableRecipe>,
 }
 
 impl BindTableRecipe {
@@ -99,11 +62,8 @@ impl RecipeBook {
         state: &T,
         shaders: &[CompilationResult],
     ) -> Result<Self, FurikakeError> {
-        let mut group_layout_vars: HashMap<u32, Vec<(dashi::ShaderType, Vec<BindGroupVariable>)>> =
-            HashMap::new();
         let mut table_layout_vars: HashMap<u32, Vec<(dashi::ShaderType, Vec<BindGroupVariable>)>> =
             HashMap::new();
-        let mut group_recipes: HashMap<u32, HashMap<String, BindingRecipe>> = HashMap::new();
         let mut table_recipes: HashMap<u32, HashMap<String, IndexedBindingRecipe>> = HashMap::new();
 
         for shader in shaders {
@@ -111,93 +71,31 @@ impl RecipeBook {
 
             for var in &shader.variables {
                 let reserved = state.binding(&var.name)?.binding();
-                match reserved {
-                    ReservedBinding::Binding(info) => {
-                        let shader_vars = group_layout_vars.entry(var.set).or_default();
+                let shader_vars = table_layout_vars.entry(var.set).or_default();
 
-                        if let Some((_stage, vars)) = shader_vars
-                            .iter_mut()
-                            .find(|(stage, _)| *stage == shader.stage)
-                        {
-                            vars.push(var.kind.clone());
-                        } else {
-                            shader_vars.push((shader.stage, vec![var.kind.clone()]));
-                        }
-
-                        group_recipes
-                            .entry(var.set)
-                            .or_default()
-                            .entry(var.name.clone())
-                            .or_insert_with(|| BindingRecipe {
-                                binding: Some(info),
-                                var: var.clone(),
-                            });
-                    }
-                    ReservedBinding::BindlessBinding(binding) => {
-                        let shader_vars = table_layout_vars.entry(var.set).or_default();
-
-                        if let Some((_stage, vars)) = shader_vars
-                            .iter_mut()
-                            .find(|(stage, _)| *stage == shader.stage)
-                        {
-                            vars.push(var.kind.clone());
-                        } else {
-                            shader_vars.push((shader.stage, vec![var.kind.clone()]));
-                        }
-
-                        let resources = binding
-                            .resources
-                            .iter()
-                            .map(|res| IndexedResource {
-                                resource: res.resource.clone(),
-                                slot: res.slot,
-                            })
-                            .collect();
-
-                        table_recipes
-                            .entry(var.set)
-                            .or_default()
-                            .entry(var.name.clone())
-                            .or_insert_with(|| IndexedBindingRecipe {
-                                bindings: Some(resources),
-                                var: var.clone(),
-                            });
-                    }
+                if let Some((_stage, vars)) = shader_vars
+                    .iter_mut()
+                    .find(|(stage, _)| *stage == shader.stage)
+                {
+                    vars.push(var.kind.clone());
+                } else {
+                    shader_vars.push((shader.stage, vec![var.kind.clone()]));
                 }
+
+                let ReservedBinding::TableBinding { resources, .. } = reserved;
+
+                table_recipes
+                    .entry(var.set)
+                    .or_default()
+                    .entry(var.name.clone())
+                    .or_insert_with(|| IndexedBindingRecipe {
+                        bindings: Some(resources),
+                        var: var.clone(),
+                    });
             }
         }
 
-        let mut bg_recipes: Vec<BindGroupRecipe> = Vec::new();
-        let mut bt_recipes: Vec<BindTableRecipe> = Vec::new();
-
-        let mut bg_sets: Vec<u32> = group_recipes.keys().copied().collect();
-        bg_sets.sort_unstable();
-        for set in bg_sets {
-            let mut shader_vars = group_layout_vars.remove(&set).unwrap_or_default();
-            let shader_info: Vec<ShaderInfo<'_>> = shader_vars
-                .iter_mut()
-                .map(|(stage, vars)| ShaderInfo {
-                    shader_type: *stage,
-                    variables: vars.as_slice(),
-                })
-                .collect();
-
-            let mut builder = BindGroupLayoutBuilder::new("[FURIKAKE] Recipe BGL");
-            for info in shader_info {
-                builder = builder.shader(info);
-            }
-
-            let layout = builder.build(ctx).map_err(FurikakeError::from)?;
-
-            let mut bindings: Vec<BindingRecipe> = group_recipes
-                .remove(&set)
-                .into_iter()
-                .flat_map(|m| m.into_values())
-                .collect();
-            bindings.sort_by_key(|b| b.var.kind.binding);
-
-            bg_recipes.push(BindGroupRecipe { bindings, layout });
-        }
+        let mut recipes: Vec<BindTableRecipe> = Vec::new();
 
         let mut bt_sets: Vec<u32> = table_recipes.keys().copied().collect();
         bt_sets.sort_unstable();
@@ -225,17 +123,16 @@ impl RecipeBook {
                 .collect();
             bindings.sort_by_key(|b| b.var.kind.binding);
 
-            bt_recipes.push(BindTableRecipe { bindings, layout });
+            recipes.push(BindTableRecipe { bindings, layout });
         }
 
         Ok(Self {
-            bg_recipes: bg_recipes.into_iter().collect(),
-            bt_recipes: bt_recipes.into_iter().collect(),
+            recipes: recipes.into_iter().collect(),
         })
     }
 
-    pub fn recipes(&self) -> (Vec<BindGroupRecipe>, Vec<BindTableRecipe>) {
-        (self.bg_recipes.clone(), self.bt_recipes.clone())
+    pub fn recipes(&self) -> Vec<BindTableRecipe> {
+        self.recipes.clone()
     }
 }
 
@@ -245,7 +142,8 @@ mod tests {
     use crate::reservations::{ReservedBinding, ReservedItem};
     use crate::{DefaultState, GPUState, ReservedMetadata};
     use dashi::{
-        BindGroupVariableType, BufferInfo, BufferView, ContextInfo, MemoryVisibility, ShaderResource, ShaderType
+        BindGroupVariableType, BufferInfo, BufferView, ContextInfo, MemoryVisibility,
+        ShaderResource, ShaderType,
     };
 
     fn make_shader_variable(
@@ -276,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn creates_bind_group_recipes_and_cooks() {
+    fn creates_bind_table_recipes_and_cooks() {
         let mut ctx = Context::headless(&ContextInfo::default()).expect("create context");
         let state = DefaultState::new(&mut ctx);
 
@@ -296,13 +194,12 @@ mod tests {
         };
 
         let book = RecipeBook::new(&mut ctx, &state, &[shader]).expect("build recipes");
-        let (mut bg_recipes, bt_recipes) = book.recipes();
+        let mut recipes = book.recipes();
 
-        assert_eq!(bg_recipes.len(), 1);
-        assert!(bt_recipes.is_empty());
+        assert_eq!(recipes.len(), 1);
 
-        let mut recipe = bg_recipes.pop().unwrap();
-        let handle = recipe.cook(&mut ctx).expect("cook bind group");
+        let mut recipe = recipes.pop().unwrap();
+        let handle = recipe.cook(&mut ctx).expect("cook bind table");
         assert!(handle.valid());
     }
 
@@ -323,7 +220,7 @@ mod tests {
 
             Self {
                 resources: vec![IndexedResource {
-                    resource: ShaderResource::Buffer(BufferView::new(buffer)),
+                    resource: ShaderResource::StorageBuffer(BufferView::new(buffer)),
                     slot: binding,
                 }],
             }
@@ -339,11 +236,11 @@ mod tests {
             Ok(())
         }
 
-        fn binding(&self) -> ReservedBinding<'_> {
-            ReservedBinding::BindlessBinding(IndexedBindingInfo {
-                resources: &self.resources,
+        fn binding(&self) -> ReservedBinding {
+            ReservedBinding::TableBinding {
                 binding: 0,
-            })
+                resources: self.resources.clone(),
+            }
         }
 
         fn as_any(&self) -> &dyn std::any::Any {
@@ -385,7 +282,7 @@ mod tests {
     }
 
     #[test]
-    fn creates_bind_table_recipes_and_cooks() {
+    fn creates_bind_table_recipes_and_cooks_bindless() {
         let mut ctx = Context::headless(&ContextInfo::default()).expect("create context");
         let state = BindlessState::new(&mut ctx);
 
@@ -405,12 +302,11 @@ mod tests {
         };
 
         let book = RecipeBook::new(&mut ctx, &state, &[shader]).expect("build recipes");
-        let (bg_recipes, mut bt_recipes) = book.recipes();
+        let mut recipes = book.recipes();
 
-        assert!(bg_recipes.is_empty());
-        assert_eq!(bt_recipes.len(), 1);
+        assert_eq!(recipes.len(), 1);
 
-        let mut recipe = bt_recipes.pop().unwrap();
+        let mut recipe = recipes.pop().unwrap();
         let handle = recipe.cook(&mut ctx).expect("cook bind table");
         assert!(handle.valid());
     }

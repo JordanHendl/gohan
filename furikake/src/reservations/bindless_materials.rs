@@ -2,11 +2,13 @@
 
 use std::ptr::NonNull;
 
-use dashi::{BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource};
+use dashi::{
+    BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource,
+};
 
 use crate::types::Material;
 
-use super::{ReservedBinding, ReservedItem};
+use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessMaterials {
     ctx: NonNull<Context>,
@@ -25,15 +27,16 @@ impl ReservedBindlessMaterials {
 
         for i in 0..START_SIZE {
             let default = [Material::default()];
-            let buf = BufferView::new(ctx
-                .make_buffer(&BufferInfo {
+            let buf = BufferView::new(
+                ctx.make_buffer(&BufferInfo {
                     debug_name: &format!("[FURIKAKE] Bindless Material {}", i),
                     byte_size: std::mem::size_of::<Material>() as u32,
                     visibility: dashi::MemoryVisibility::CpuAndGpu,
                     usage: dashi::BufferUsage::STORAGE,
                     initial_data: Some(unsafe { default.align_to::<u8>().1 }),
                 })
-                .expect("Failed making material buffer"));
+                .expect("Failed making material buffer"),
+            );
 
             let h = ctx
                 .map_buffer_mut::<Material>(buf)
@@ -63,15 +66,16 @@ impl ReservedBindlessMaterials {
             let end = start + EXTENSION_SIZE;
             for i in start..end {
                 let default = [Material::default()];
-                let buf = BufferView::new(ctx
-                    .make_buffer(&BufferInfo {
+                let buf = BufferView::new(
+                    ctx.make_buffer(&BufferInfo {
                         debug_name: &format!("[FURIKAKE] Bindless Material {}", i),
                         byte_size: std::mem::size_of::<Material>() as u32,
                         visibility: dashi::MemoryVisibility::CpuAndGpu,
                         usage: dashi::BufferUsage::STORAGE,
                         initial_data: Some(unsafe { default.align_to::<u8>().1 }),
                     })
-                    .expect("Failed making material buffer"));
+                    .expect("Failed making material buffer"),
+                );
 
                 let h = ctx
                     .map_buffer_mut::<Material>(buf)
@@ -121,8 +125,8 @@ impl ReservedItem for ReservedBindlessMaterials {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        ReservedBinding::BindlessBinding(IndexedBindingInfo {
+    fn binding(&self) -> ReservedBinding {
+        table_binding_from_indexed(IndexedBindingInfo {
             resources: &self.device_material_data,
             binding: 0,
         })

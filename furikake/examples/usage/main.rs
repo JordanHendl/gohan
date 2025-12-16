@@ -94,31 +94,31 @@ fn main() {
         frag_resolver.resolved()
     );
 
-    // Build bind group/table layouts and bind groups from the recipe book using the reflected
+    // Build bind table layouts and bind tables from the recipe book using the reflected
     // reserved bindings. This keeps the example aligned with the way furikake consumes
     // reservations in real applications.
     let book = RecipeBook::new(&mut ctx, &state, shaders.as_slice())
         .expect("build recipe book from shaders");
-    let (mut bg_recipes, _bt_recipes) = book.recipes();
+    let mut bt_recipes = book.recipes();
 
-    let mut bg_layouts: [Option<Handle<BindGroupLayout>>; 4] = [None, None, None, None];
-    let mut bind_groups: [Option<Handle<BindGroup>>; 4] = [None, None, None, None];
+    let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None, None, None, None];
+    let mut bind_tables: [Option<Handle<BindTable>>; 4] = [None, None, None, None];
 
-    for mut recipe in bg_recipes.drain(..) {
+    for mut recipe in bt_recipes.drain(..) {
         let set = recipe
             .bindings
             .first()
             .map(|b| b.var.set as usize)
             .unwrap_or(0);
 
-        if set < bg_layouts.len() {
-            bg_layouts[set] = Some(recipe.layout);
+        if set < bt_layouts.len() {
+            bt_layouts[set] = Some(recipe.layout);
         }
 
-        let bind_group = recipe.cook(&mut ctx).expect("cook bind group from recipe");
+        let bind_table = recipe.cook(&mut ctx).expect("cook bind table from recipe");
 
-        if set < bind_groups.len() {
-            bind_groups[set] = Some(bind_group);
+        if set < bind_tables.len() {
+            bind_tables[set] = Some(bind_table);
         }
     }
 
@@ -163,8 +163,8 @@ fn main() {
         })
         .expect("create index buffer");
 
-    // Use the reserved timing bind group produced by the recipe book.
-    let timing_bind_group = bind_groups[0].expect("timing bind group from recipe book");
+    // Use the reserved timing bind table produced by the recipe book.
+    let timing_bind_table = bind_tables[0].expect("timing bind table from recipe book");
 
     // Pipeline setup.
     let vert_inputs = &shaders[0].metadata.inputs;
@@ -197,8 +197,8 @@ fn main() {
                 stride: std::mem::size_of::<Vertex>(),
                 rate: VertexRate::Vertex,
             },
-            bg_layouts,
-            bt_layouts: [None, None, None, None],
+            bg_layouts: [None, None, None, None],
+            bt_layouts,
             shaders: &[
                 PipelineShaderInfo {
                     stage: ShaderType::Vertex,
@@ -316,7 +316,8 @@ fn main() {
             vertices: vertex_buffer,
             indices: index_buffer,
             index_count: indices.len() as u32,
-            bind_groups: [Some(timing_bind_group), None, None, None],
+            bind_groups: [None, None, None, None],
+            bind_tables: [Some(timing_bind_table), None, None, None],
             ..Default::default()
         });
 

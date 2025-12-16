@@ -1,8 +1,7 @@
 use std::ptr::NonNull;
 
 use dashi::{
-    BindingInfo, BufferInfo, Context, DynamicAllocatorInfo, DynamicBuffer, Handle,
-    IndexedBindingInfo, IndexedResource, ShaderResource,
+    BufferInfo, Context, DynamicAllocatorInfo, DynamicBuffer, Handle, IndexedResource, ShaderResource,
 };
 
 use crate::types::{BindlessPerObj, Camera};
@@ -48,11 +47,14 @@ impl ReservedItem for ReservedBindlessPerObj {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        return ReservedBinding::Binding(BindingInfo {
-            resource: ShaderResource::Dynamic(self.alloc.state()),
+    fn binding(&self) -> ReservedBinding {
+        ReservedBinding::TableBinding {
             binding: 0,
-        });
+            resources: vec![IndexedResource {
+                resource: ShaderResource::Dynamic(self.alloc.state()),
+                slot: 0,
+            }],
+        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

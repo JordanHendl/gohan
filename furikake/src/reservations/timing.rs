@@ -1,5 +1,6 @@
 use dashi::{
-    BindingInfo, Buffer, BufferInfo, BufferView, Context, Handle, MemoryVisibility, ShaderResource,
+    Buffer, BufferInfo, BufferView, Context, Handle, IndexedResource, MemoryVisibility,
+    ShaderResource,
 };
 use std::time::Instant;
 
@@ -60,15 +61,18 @@ impl ReservedItem for ReservedTiming {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        return ReservedBinding::Binding(BindingInfo {
-            resource: ShaderResource::ConstBuffer(BufferView {
-                handle: self.buffer,
-                size: (std::mem::size_of::<f32>() * 2) as u64,
-                offset: 0,
-            }),
+    fn binding(&self) -> ReservedBinding {
+        ReservedBinding::TableBinding {
             binding: 0,
-        });
+            resources: vec![IndexedResource {
+                resource: ShaderResource::ConstBuffer(BufferView {
+                    handle: self.buffer,
+                    size: (std::mem::size_of::<f32>() * 2) as u64,
+                    offset: 0,
+                }),
+                slot: 0,
+            }],
+        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

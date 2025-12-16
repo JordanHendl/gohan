@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use dashi::{BindGroupVariable, BindingInfo, Buffer, BufferView, Context, Handle, ShaderResource};
+use dashi::{BindGroupVariable, BufferView, Context, IndexedResource, ShaderResource};
 
 use crate::types::Camera;
 
@@ -50,15 +50,18 @@ impl ReservedItem for ReservedCamera {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        return ReservedBinding::Binding(BindingInfo {
-            resource: ShaderResource::ConstBuffer(BufferView {
-                handle: self.buffer.handle,
-                size: (std::mem::size_of::<Data>()) as u64,
-                offset: 0,
-            }),
+    fn binding(&self) -> ReservedBinding {
+        ReservedBinding::TableBinding {
             binding: 0,
-        });
+            resources: vec![IndexedResource {
+                resource: ShaderResource::ConstBuffer(BufferView {
+                    handle: self.buffer.handle,
+                    size: (std::mem::size_of::<Data>()) as u64,
+                    offset: 0,
+                }),
+                slot: 0,
+            }],
+        }
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
