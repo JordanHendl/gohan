@@ -8,7 +8,7 @@ use dashi::{
 
 use crate::types::Transformation;
 
-use super::{ReservedBinding, ReservedItem};
+use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessTransformations {
     ctx: NonNull<Context>,
@@ -128,8 +128,8 @@ impl ReservedItem for ReservedBindlessTransformations {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        ReservedBinding::BindlessBinding(IndexedBindingInfo {
+    fn binding(&self) -> ReservedBinding {
+        table_binding_from_indexed(IndexedBindingInfo {
             resources: &self.device_transformation_data,
             binding: 0,
         })

@@ -58,17 +58,13 @@ fn main() {
         resolver.resolved()
     );
 
-    // Build a bind group from the reservation metadata.
+    // Build a bind table from the reservation metadata.
     let book = RecipeBook::new(&mut ctx, &state, &[shader]).expect("build recipe book");
-    let (mut bg_recipes, bt_recipes) = book.recipes();
-    println!(
-        "Created {} bind group recipe(s) and {} bind table recipe(s)",
-        bg_recipes.len(),
-        bt_recipes.len()
-    );
+    let mut bt_recipes = book.recipes();
+    println!("Created {} bind table recipe(s)", bt_recipes.len());
 
-    let mut recipe = bg_recipes.pop().expect("timing bind group recipe");
-    let _bind_group = recipe.cook(&mut ctx).expect("cook timing bind group");
+    let mut recipe = bt_recipes.pop().expect("timing bind table recipe");
+    let _bind_table = recipe.cook(&mut ctx).expect("cook timing bind table");
 
     // Update the timing data and read the values written by the reservation.
     state.update().expect("refresh reserved timing");

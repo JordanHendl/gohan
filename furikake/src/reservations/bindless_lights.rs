@@ -2,11 +2,13 @@
 
 use std::ptr::NonNull;
 
-use dashi::{BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource};
+use dashi::{
+    BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource,
+};
 
 use crate::types::Texture;
 
-use super::{ReservedBinding, ReservedItem};
+use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessLights {
     ctx: NonNull<Context>,
@@ -25,15 +27,16 @@ impl ReservedBindlessLights {
 
         for i in 0..START_SIZE {
             let default = [Texture::default()];
-            let buf = BufferView::new(ctx
-                .make_buffer(&BufferInfo {
+            let buf = BufferView::new(
+                ctx.make_buffer(&BufferInfo {
                     debug_name: &format!("[FURIKAKE] Bindless Texture {}", i),
                     byte_size: std::mem::size_of::<Texture>() as u32,
                     visibility: dashi::MemoryVisibility::CpuAndGpu,
                     usage: dashi::BufferUsage::STORAGE,
                     initial_data: Some(unsafe { default.align_to::<u8>().1 }),
                 })
-                .expect("Failed making texture buffer"));
+                .expect("Failed making texture buffer"),
+            );
 
             let h = ctx
                 .map_buffer_mut::<Texture>(buf)
@@ -63,15 +66,16 @@ impl ReservedBindlessLights {
             let end = start + EXTENSION_SIZE;
             for i in start..end {
                 let default = [Texture::default()];
-                let buf = BufferView::new(ctx
-                    .make_buffer(&BufferInfo {
+                let buf = BufferView::new(
+                    ctx.make_buffer(&BufferInfo {
                         debug_name: &format!("[FURIKAKE] Bindless Texture {}", i),
                         byte_size: std::mem::size_of::<Texture>() as u32,
                         visibility: dashi::MemoryVisibility::CpuAndGpu,
                         usage: dashi::BufferUsage::STORAGE,
                         initial_data: Some(unsafe { default.align_to::<u8>().1 }),
                     })
-                    .expect("Failed making texture buffer"));
+                    .expect("Failed making texture buffer"),
+                );
 
                 let h = ctx
                     .map_buffer_mut::<Texture>(buf)
@@ -121,8 +125,8 @@ impl ReservedItem for ReservedBindlessLights {
         Ok(())
     }
 
-    fn binding(&self) -> ReservedBinding<'_> {
-        ReservedBinding::BindlessBinding(IndexedBindingInfo {
+    fn binding(&self) -> ReservedBinding {
+        table_binding_from_indexed(IndexedBindingInfo {
             resources: &self.device_texture_data,
             binding: 0,
         })

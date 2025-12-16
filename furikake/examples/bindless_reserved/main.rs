@@ -117,13 +117,7 @@ fn main() {
     );
 
     let book = RecipeBook::new(&mut ctx, &state, &[shader]).expect("build recipe book");
-    let (mut bg_recipes, mut bt_recipes) = book.recipes();
-    println!("Bind group recipes: {}", bg_recipes.len());
-    for recipe in &bg_recipes {
-        let set = recipe.bindings.first().map(|b| b.var.set).unwrap_or(0);
-        println!("  set {set} -> {} binding(s)", recipe.bindings.len());
-    }
-
+    let mut bt_recipes = book.recipes();
     println!("Bind table recipes: {}", bt_recipes.len());
     for recipe in &bt_recipes {
         let set = recipe.bindings.first().map(|b| b.var.set).unwrap_or(0);
@@ -356,9 +350,6 @@ fn main() {
     );
 
     // Cook the bindless resources after we've populated data to mirror real usage.
-    for mut recipe in bg_recipes.drain(..) {
-        let _group = recipe.cook(&mut ctx).expect("cook bind group");
-    }
     for mut recipe in bt_recipes.drain(..) {
         let _table = recipe.cook(&mut ctx).expect("cook bind table");
     }
