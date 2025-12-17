@@ -483,7 +483,7 @@ fn compute_table_rejects_out_of_range_slots() {
         )
         .build(&mut ctx);
     // Test currently does not pass.
-//    assert!(pipeline.is_none());
+    //    assert!(pipeline.is_none());
 }
 
 #[test]
@@ -626,7 +626,7 @@ fn test_cull_shader_binding_mix() {
         })
         .expect("uniform buffer");
 
-    let mut cull_builder = ComputePipelineBuilder::new()
+    let mut cso = ComputePipelineBuilder::new()
         .shader(Some(
             include_str!("fixtures/scene_cull.comp.glsl").as_bytes(),
         ))
@@ -662,6 +662,13 @@ fn test_cull_shader_binding_mix() {
         .add_variable("camera", ShaderResource::ConstBuffer(uniform.into()))
         .add_variable("params", ShaderResource::ConstBuffer(uniform.into()))
         .build(&mut ctx);
+
+    assert!(cso.is_some());
+
+    let cso = cso.unwrap();
+
+    assert!(cso.tables()[0].is_some());
+    assert!(cso.tables()[1].is_some());
 }
 
 #[test]
@@ -700,6 +707,6 @@ fn graphics_table_rejects_out_of_range_slots() {
             }],
         )
         .build(&mut ctx);
-// currently fails assertion, this should fail in actual test.
-//    assert!(pipeline.is_none());
+    // currently fails assertion, this should fail in actual test.
+    //    assert!(pipeline.is_none());
 }
