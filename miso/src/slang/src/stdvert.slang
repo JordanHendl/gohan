@@ -19,7 +19,7 @@ struct VSOutput
     float3 pos;
     float3 normal;
     float2 tex_coords;
-}
+};
 
 [shader("vertex")]
 VSOutput main(VSInput input)
