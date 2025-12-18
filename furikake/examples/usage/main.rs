@@ -59,6 +59,7 @@ fn main() {
                 stage: dashi::ShaderType::Vertex,
                 optimization: OptimizationLevel::None,
                 debug_symbols: true,
+                ..Default::default()
             },
         )
         .expect("compile vertex shader");
@@ -72,6 +73,7 @@ fn main() {
                 stage: dashi::ShaderType::Fragment,
                 optimization: OptimizationLevel::None,
                 debug_symbols: true,
+                ..Default::default()
             },
         )
         .expect("compile fragment shader");

@@ -100,6 +100,7 @@ fn compile_shader() -> bento::CompilationResult {
                 stage: ShaderType::Compute,
                 optimization: OptimizationLevel::None,
                 debug_symbols: true,
+                ..Default::default()
             },
         )
         .expect("compile compute shader")

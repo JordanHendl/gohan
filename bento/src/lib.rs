@@ -99,6 +99,19 @@ pub struct Request {
     pub defines: HashMap<String, Option<String>>,
 }
 
+impl Default for Request {
+    fn default() -> Self {
+        Self {
+            name: Default::default(),
+            lang: ShaderLang::Glsl,
+            stage: dashi::ShaderType::All,
+            optimization: OptimizationLevel::Performance,
+            debug_symbols: Default::default(),
+            defines: Default::default(),
+        }
+    }
+}
+
 /// Serialized result produced after compiling a shader into the Bento Format.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CompilationResult {

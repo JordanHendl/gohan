@@ -48,6 +48,7 @@ fn main() {
                 stage: ShaderType::Vertex,
                 optimization: OptimizationLevel::None,
                 debug_symbols: false,
+                ..Default::default()
             },
         )
         .expect("compile vertex shader");
@@ -61,6 +62,7 @@ fn main() {
                 stage: ShaderType::Fragment,
                 optimization: OptimizationLevel::None,
                 debug_symbols: false,
+                ..Default::default()
             },
         )
         .expect("compile fragment shader");
