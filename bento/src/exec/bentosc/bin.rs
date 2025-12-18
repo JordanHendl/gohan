@@ -1,6 +1,6 @@
 use bento::{Compiler, OptimizationLevel, Request, ShaderLang};
 use clap::{ArgAction, Parser, ValueEnum};
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 /// Command-line representation of supported shader languages.
 #[derive(Debug, Clone, ValueEnum)]
@@ -99,6 +99,10 @@ struct Args {
     /// Print verbose compilation metadata
     #[arg(short, long, action = ArgAction::SetTrue)]
     verbose: bool,
+
+    /// Preprocessor definitions passed to the compiler
+    #[arg(short = 'D', long = "define", value_name = "NAME[=VALUE]")]
+    defines: Vec<String>,
 }
 
 fn main() {
@@ -111,12 +115,16 @@ fn main() {
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
+    let defines = parse_defines(&args.defines)
+        .map_err(|err| format!("Invalid preprocessor definition: {err}"))?;
+
     let request = Request {
         name: args.name.clone(),
         lang: args.lang.into(),
         stage: args.stage.into(),
         optimization: args.optimization.into(),
         debug_symbols: args.debug_symbols,
+        defines,
     };
 
     let compiler = Compiler::new()?;
@@ -130,6 +138,30 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     result.save_to_disk(output_path.to_str().unwrap())?;
 
     Ok(())
+}
+
+fn parse_defines(raw_defines: &[String]) -> Result<HashMap<String, Option<String>>, String> {
+    let mut defines = HashMap::new();
+
+    for raw in raw_defines {
+        if raw.is_empty() {
+            return Err("definition cannot be empty".into());
+        }
+
+        let (name, value) = if let Some((name, value)) = raw.split_once('=') {
+            if name.trim().is_empty() {
+                return Err("definition is missing a name".into());
+            }
+
+            (name.trim().to_string(), Some(value.trim().to_string()))
+        } else {
+            (raw.trim().to_string(), None)
+        };
+
+        defines.insert(name, value);
+    }
+
+    Ok(defines)
 }
 
 fn print_metadata(result: &bento::CompilationResult) {

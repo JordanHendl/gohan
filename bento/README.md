@@ -21,9 +21,16 @@ bentosc tests/fixtures/simple_compute.glsl \
     --opt performance \
     --output target/simple_compute.bto \
     --name simple_compute \
+    -DWORKGROUP_SIZE=8 \
     --verbose
 ```
 
 Supported languages include GLSL, HLSL, and Slang via the `--lang` flag.
+
+Use `-D`/`--define` to forward preprocessor definitions to the compiler. Repeat the flag to add more than one definition:
+
+```
+bentosc shader.glsl --stage compute --lang glsl -DWORKGROUP_SIZE=64 -DENABLE_DEBUG
+```
 
 The command prints metadata about the compiled shader when `--verbose` is provided and writes the Bento File to the path specified by `--output`.

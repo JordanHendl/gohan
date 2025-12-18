@@ -1,4 +1,5 @@
 use bento::{BentoError, Compiler, OptimizationLevel, Request, ShaderLang};
+use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
@@ -30,6 +31,7 @@ fn compiles_repository_shaders() -> Result<(), BentoError> {
             stage,
             optimization: OptimizationLevel::Performance,
             debug_symbols: false,
+            defines: HashMap::new(),
         };
 
         let shader_path = path.to_str().expect("Shader path should be valid UTF-8");
