@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -239,6 +240,7 @@ fn compile_shader(stage: dashi::ShaderType, source: &str) -> CompilationResult {
         stage,
         optimization: OptimizationLevel::Performance,
         debug_symbols: false,
+        defines: HashMap::new(),
     };
 
     compiler

@@ -1,17 +1,17 @@
-pub mod error;
 pub mod builder;
+pub mod error;
 use std::{collections::HashMap, fs, path::Path};
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
-use shaderc::{
-    CompileOptions, Compiler as ShadercCompiler, EnvVersion, OptimizationLevel as ShadercOpt,
-    ShaderKind, SourceLanguage, SpirvVersion, TargetEnv,
-};
 use rspirv::{
     binary::Assemble,
     dr::{Instruction, Operand},
     spirv,
+};
+use serde::{Deserialize, Serialize};
+use shaderc::{
+    CompileOptions, Compiler as ShadercCompiler, EnvVersion, OptimizationLevel as ShadercOpt,
+    ShaderKind, SourceLanguage, SpirvVersion, TargetEnv,
 };
 
 pub use error::*;
@@ -95,6 +95,8 @@ pub struct Request {
     pub stage: dashi::ShaderType,
     pub optimization: OptimizationLevel,
     pub debug_symbols: bool,
+    #[serde(default)]
+    pub defines: HashMap<String, Option<String>>,
 }
 
 /// Serialized result produced after compiling a shader into the Bento Format.
@@ -351,6 +353,10 @@ impl Compiler {
         options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_2 as u32);
         options.set_target_spirv(SpirvVersion::V1_3);
         options.set_optimization_level(shaderc_optimization(request.optimization));
+
+        for (name, value) in &request.defines {
+            options.add_macro_definition(name, value.as_deref());
+        }
 
         if request.debug_symbols {
             options.set_generate_debug_info();
@@ -654,7 +660,9 @@ fn parse_source_bindings(source: &str, lang: ShaderLang) -> Result<Vec<SourceBin
 
 fn parse_glsl_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
     let regex = Regex::new(r"layout\s*\(\s*set\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\)")
-        .map_err(|e| BentoError::ShaderCompilation(format!("Invalid GLSL reflection regex: {e}")))?;
+        .map_err(|e| {
+            BentoError::ShaderCompilation(format!("Invalid GLSL reflection regex: {e}"))
+        })?;
 
     Ok(regex
         .captures_iter(source)
@@ -870,9 +878,7 @@ fn take_source_name(set: u32, binding: u32, sources: &mut Vec<SourceBinding>) ->
 fn extract_binding_name(declaration: &str) -> Option<String> {
     fn first_identifier(segment: &str) -> Option<String> {
         let regex = Regex::new(r"[A-Za-z_][A-Za-z0-9_]*").ok()?;
-        regex
-            .find(segment)
-            .map(|m| m.as_str().to_string())
+        regex.find(segment).map(|m| m.as_str().to_string())
     }
 
     fn last_identifier(segment: &str) -> Option<String> {
@@ -1266,6 +1272,7 @@ mod tests {
             stage: dashi::ShaderType::Compute,
             optimization: OptimizationLevel::None,
             debug_symbols: false,
+            defines: HashMap::new(),
         }
     }
 
@@ -1276,6 +1283,7 @@ mod tests {
             stage: dashi::ShaderType::Vertex,
             optimization: OptimizationLevel::None,
             debug_symbols: false,
+            defines: HashMap::new(),
         }
     }
 
@@ -1362,10 +1370,7 @@ layout(set = 0, binding = 6) uniform SceneCamera {
         }
 
         assert_eq!(names_by_binding.get(&5), Some(&"camera".to_string()));
-        assert_eq!(
-            names_by_binding.get(&6),
-            Some(&"SceneCamera".to_string())
-        );
+        assert_eq!(names_by_binding.get(&6), Some(&"SceneCamera".to_string()));
 
         Ok(())
     }
@@ -1388,10 +1393,7 @@ ConstantBuffer<SceneCamera> camera : register(b6);
         }
 
         assert_eq!(names_by_binding.get(&0), Some(&"camera".to_string()));
-        assert_eq!(
-            names_by_binding.get(&1),
-            Some(&"SceneCamera".to_string())
-        );
+        assert_eq!(names_by_binding.get(&1), Some(&"SceneCamera".to_string()));
 
         Ok(())
     }

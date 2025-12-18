@@ -728,6 +728,7 @@ impl ComputePipelineBuilder {
                                 stage: ShaderType::Compute,
                                 optimization: OptimizationLevel::Performance,
                                 debug_symbols: false,
+                                defines: HashMap::new(),
                             },
                         )
                         .unwrap(),

@@ -1,4 +1,5 @@
 use bento::{BentoError, Compiler, OptimizationLevel, Request, ShaderLang};
+use std::collections::HashMap;
 
 fn spirv_words_to_bytes(words: &[u32]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(words.as_ptr() as *const u8, words.len() * 4) }
@@ -27,6 +28,7 @@ fn sample_request(lang: ShaderLang) -> Request {
         stage: dashi::ShaderType::Compute,
         optimization: OptimizationLevel::None,
         debug_symbols: false,
+        defines: HashMap::new(),
     }
 }
 
@@ -148,6 +150,22 @@ fn infers_slang_shader_language() -> Result<(), BentoError> {
     let result = compiler.compile_from_file(path, &request)?;
 
     assert_eq!(result.lang, ShaderLang::Slang);
+
+    Ok(())
+}
+
+#[test]
+fn applies_preprocessor_definitions() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let mut request = sample_request(ShaderLang::Glsl);
+    request
+        .defines
+        .insert("WORKGROUP_SIZE".into(), Some("4".into()));
+    let path = "tests/fixtures/define_workgroup.glsl";
+
+    let result = compiler.compile_from_file(path, &request)?;
+
+    assert_eq!(result.metadata.workgroup_size, Some([4, 1, 1]));
 
     Ok(())
 }
