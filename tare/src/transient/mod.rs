@@ -114,9 +114,11 @@ pub struct TransientAllocator {
     images: Ring<Vec<(ImageKey, Handle<Image>)>, MAX_FRAMES>,
     buffers: Ring<Vec<(BufferKey, Handle<Buffer>)>, MAX_FRAMES>,
     renderpasses: Ring<Vec<(u64, Handle<RenderPass>)>, MAX_FRAMES>,
+    semaphores: Ring<Vec<Handle<Semaphore>>, MAX_FRAMES>,
     available_images: HashMap<ImageKey, Vec<ReuseEntry<Handle<Image>>>>,
     available_buffers: HashMap<BufferKey, Vec<ReuseEntry<Handle<Buffer>>>>,
     available_renderpasses: HashMap<u64, Vec<ReuseEntry<Handle<RenderPass>>>>,
+    available_semaphores: Vec<ReuseEntry<Handle<Semaphore>>>,
 }
 
 impl TransientAllocator {
@@ -126,9 +128,11 @@ impl TransientAllocator {
             images: Ring::new(),
             buffers: Ring::new(),
             renderpasses: Ring::new(),
+            semaphores: Ring::new(),
             available_images: HashMap::new(),
             available_buffers: HashMap::new(),
             available_renderpasses: HashMap::new(),
+            available_semaphores: Vec::new(),
         }
     }
 
@@ -161,6 +165,10 @@ impl TransientAllocator {
                 .entry(key)
                 .or_default()
                 .push(ReuseEntry { handle: rp, age: 0 });
+        }
+
+        for sem in self.semaphores.get_mut(stale_index).drain(..) {
+            self.available_semaphores.push(ReuseEntry { handle: sem, age: 0 });
         }
     }
 
@@ -205,6 +213,16 @@ impl TransientAllocator {
             });
             !list.is_empty()
         });
+
+        self.available_semaphores.retain_mut(|entry| {
+            entry.age += 1;
+            if entry.age >= UNUSED_RETIRE_THRESHOLD {
+                ctx.destroy_semaphore(entry.handle);
+                false
+            } else {
+                true
+            }
+        });
     }
 
     pub fn advance(&mut self) {
@@ -214,6 +232,7 @@ impl TransientAllocator {
         self.images.advance();
         self.buffers.advance();
         self.renderpasses.advance();
+        self.semaphores.advance();
     }
 
     // Make a transient image matching the parameters input from this frame.
@@ -300,6 +319,22 @@ impl TransientAllocator {
 
         handle
     }
+
+    pub fn make_semaphore(&mut self) -> Handle<Semaphore> {
+        let handle = self
+            .available_semaphores
+            .pop()
+            .map(|entry| entry.handle)
+            .unwrap_or_else(|| unsafe { self.ctx.as_mut() }.make_semaphore().expect("Make transient semaphore"));
+
+        self.semaphores.data_mut().push(handle);
+
+        handle
+    }
+
+    pub fn make_semaphores(&mut self, count: usize) -> Vec<Handle<Semaphore>> {
+        (0..count).map(|_| self.make_semaphore()).collect()
+    }
 }
 
 impl Drop for TransientAllocator {
@@ -324,6 +359,11 @@ impl Drop for TransientAllocator {
             ctx.destroy_render_pass(handle);
         }
 
+        for sem in self.semaphores.data.iter_mut().flatten() {
+            let handle = *sem;
+            ctx.destroy_semaphore(handle);
+        }
+
         for imgs in self.available_images.drain() {
             for entry in imgs.1 {
                 ctx.destroy_image(entry.handle);
@@ -340,6 +380,10 @@ impl Drop for TransientAllocator {
             for entry in rps.1 {
                 ctx.destroy_render_pass(entry.handle);
             }
+        }
+
+        for sem in self.available_semaphores.drain(..) {
+            ctx.destroy_semaphore(sem.handle);
         }
     }
 }
