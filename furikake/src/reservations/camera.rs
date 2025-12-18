@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use dashi::{BindGroupVariable, BufferView, Context, IndexedResource, ShaderResource};
+use dashi::{cmd::Executable, BindGroupVariable, BufferView, CommandStream, Context, IndexedResource, ShaderResource};
 
-use crate::types::Camera;
+use crate::{error::FurikakeError, types::Camera};
 
 use super::{ReservedBinding, ReservedItem};
 
@@ -36,18 +36,8 @@ impl ReservedItem for ReservedCamera {
         "meshi_camera".to_string()
     }
 
-    fn update(&mut self, ctx: &mut Context) -> Result<(), crate::error::FurikakeError> {
-        let s = ctx
-            .map_buffer_mut::<Data>(self.buffer)
-            .map_err(crate::error::FurikakeError::buffer_map_failed)?;
-        // update transform
-
-        s[0].transform = self.camera.view_matrix();
-
-        ctx.unmap_buffer(self.buffer.handle)
-            .map_err(crate::error::FurikakeError::buffer_unmap_failed)?;
-
-        Ok(())
+    fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+        Ok(CommandStream::new().begin().end())
     }
 
     fn binding(&self) -> ReservedBinding {

@@ -3,11 +3,10 @@
 use std::ptr::NonNull;
 
 use dashi::{
-    Context, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, Sampler,
-    SamplerInfo, ShaderResource,
+    cmd::Executable, CommandStream, Context, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, Sampler, SamplerInfo, ShaderResource
 };
 
-use crate::types::Texture;
+use crate::{error::FurikakeError, types::Texture};
 
 use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
@@ -153,8 +152,8 @@ impl ReservedItem for ReservedBindlessTextures {
         "meshi_bindless_textures".to_string()
     }
 
-    fn update(&mut self, _ctx: &mut Context) -> Result<(), crate::error::FurikakeError> {
-        Ok(())
+    fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+        Ok(CommandStream::new().begin().end())
     }
 
     fn binding(&self) -> ReservedBinding {

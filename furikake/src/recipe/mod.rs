@@ -141,9 +141,9 @@ mod tests {
     use super::*;
     use crate::reservations::{ReservedBinding, ReservedItem};
     use crate::{DefaultState, GPUState, ReservedMetadata};
+    use dashi::cmd::Executable;
     use dashi::{
-        BindGroupVariableType, BufferInfo, BufferView, ContextInfo, MemoryVisibility,
-        ShaderResource, ShaderType,
+        BindGroupVariableType, BufferInfo, BufferView, CommandStream, ContextInfo, MemoryVisibility, ShaderResource, ShaderType
     };
 
     fn make_shader_variable(
@@ -232,8 +232,8 @@ mod tests {
             "bindless_test".to_string()
         }
 
-        fn update(&mut self, _ctx: &mut Context) -> Result<(), FurikakeError> {
-            Ok(())
+        fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+            Ok(CommandStream::new().begin().end())
         }
 
         fn binding(&self) -> ReservedBinding {

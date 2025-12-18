@@ -3,116 +3,63 @@
 use std::ptr::NonNull;
 
 use dashi::{
-    BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource,
+    cmd::Executable, BufferInfo, BufferUsage, BufferView, CommandStream, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource
 };
+use tare::utils::StagedBuffer;
 
-use crate::types::Texture;
+use crate::{error::FurikakeError, types::Light};
 
 use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessLights {
     ctx: NonNull<Context>,
-    device_texture_data: Vec<IndexedResource>,
-    host_texture_data: Vec<NonNull<Texture>>,
+    data: StagedBuffer,
     available: Vec<u16>,
 }
 
 impl ReservedBindlessLights {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_SIZE: usize = 512;
+        const START_SIZE: usize = 1024;
 
-        let mut d_data = Vec::with_capacity(START_SIZE);
-        let mut h_data = Vec::with_capacity(START_SIZE);
         let available: Vec<u16> = (0..START_SIZE as u16).collect();
-
-        for i in 0..START_SIZE {
-            let default = [Texture::default()];
-            let buf = BufferView::new(
-                ctx.make_buffer(&BufferInfo {
-                    debug_name: &format!("[FURIKAKE] Bindless Texture {}", i),
-                    byte_size: std::mem::size_of::<Texture>() as u32,
-                    visibility: dashi::MemoryVisibility::CpuAndGpu,
-                    usage: dashi::BufferUsage::STORAGE,
-                    initial_data: Some(unsafe { default.align_to::<u8>().1 }),
-                })
-                .expect("Failed making texture buffer"),
-            );
-
-            let h = ctx
-                .map_buffer_mut::<Texture>(buf)
-                .expect("Failed to map buffer");
-            let nnt = NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for texture map!");
-
-            h_data.push(nnt);
-            d_data.push(IndexedResource {
-                resource: ShaderResource::StorageBuffer(buf),
-                slot: i as u32,
-            });
-        }
+        let data = StagedBuffer::new(
+            ctx,
+            BufferInfo {
+                debug_name: "[FURIKAKE] Light Buffer",
+                byte_size: std::mem::size_of::<Light>() as u32 * START_SIZE as u32,
+                visibility: Default::default(),
+                usage: BufferUsage::ALL,
+                initial_data: None,
+            },
+        );
 
         Self {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
-            device_texture_data: d_data,
-            host_texture_data: h_data,
+            data,
             available,
         }
     }
 
-    pub fn extend(&mut self) {
-        let ctx: &mut Context = unsafe { self.ctx.as_mut() };
-        if self.available.is_empty() {
-            const EXTENSION_SIZE: usize = 128;
-            let start = self.host_texture_data.len();
-            let end = start + EXTENSION_SIZE;
-            for i in start..end {
-                let default = [Texture::default()];
-                let buf = BufferView::new(
-                    ctx.make_buffer(&BufferInfo {
-                        debug_name: &format!("[FURIKAKE] Bindless Texture {}", i),
-                        byte_size: std::mem::size_of::<Texture>() as u32,
-                        visibility: dashi::MemoryVisibility::CpuAndGpu,
-                        usage: dashi::BufferUsage::STORAGE,
-                        initial_data: Some(unsafe { default.align_to::<u8>().1 }),
-                    })
-                    .expect("Failed making texture buffer"),
-                );
-
-                let h = ctx
-                    .map_buffer_mut::<Texture>(buf)
-                    .expect("Failed to map buffer");
-                let nnt =
-                    NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for texture map!");
-
-                self.host_texture_data.push(nnt);
-                self.device_texture_data.push(IndexedResource {
-                    resource: ShaderResource::StorageBuffer(buf),
-                    slot: i as u32,
-                });
-            }
+    pub fn remove_light(&mut self, light: Handle<Light>) {
+        if light.valid() && (light.slot as usize) < 512 {
+            self.available.push(light.slot);
         }
     }
 
-    pub fn remove_texture(&mut self, texture: Handle<Texture>) {
-        if texture.valid() && (texture.slot as usize) < self.device_texture_data.len() {
-            self.available.push(texture.slot);
-        }
-    }
-
-    pub fn add_texture(&mut self) -> Handle<Texture> {
+    pub fn add_light(&mut self) -> Handle<Light> {
         if let Some(id) = self.available.pop() {
-            Handle::new(id, 0)
-        } else {
-            self.extend();
-            self.add_texture()
+            return Handle::new(id, 0);
         }
+
+        return Handle::new(0, 0);
     }
 
-    pub fn texture(&self, handle: Handle<Texture>) -> &Texture {
-        unsafe { self.host_texture_data[handle.slot as usize].as_ref() }
+    pub fn light(&self, handle: Handle<Light>) -> &Light {
+        &self.data.as_slice()[handle.slot as usize]
     }
 
-    pub fn texture_mut(&mut self, handle: Handle<Texture>) -> &mut Texture {
-        unsafe { self.host_texture_data[handle.slot as usize].as_mut() }
+    pub fn light_mut(&mut self, handle: Handle<Light>) -> &mut Light {
+        &mut self.data.as_slice_mut()[handle.slot as usize]
     }
 }
 
@@ -121,15 +68,18 @@ impl ReservedItem for ReservedBindlessLights {
         "meshi_bindless_lights".to_string()
     }
 
-    fn update(&mut self, _ctx: &mut Context) -> Result<(), crate::error::FurikakeError> {
-        Ok(())
+    fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+        Ok(self.data.sync_up().end())
     }
 
     fn binding(&self) -> ReservedBinding {
-        table_binding_from_indexed(IndexedBindingInfo {
-            resources: &self.device_texture_data,
+        return table_binding_from_indexed(IndexedBindingInfo {
+            resources: &[IndexedResource {
+                resource: ShaderResource::StorageBuffer(self.data.device().into()),
+                slot: 0,
+            }],
             binding: 0,
-        })
+        });
     }
 
     fn as_any(&self) -> &dyn std::any::Any {

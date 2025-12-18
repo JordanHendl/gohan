@@ -1,8 +1,10 @@
 use dashi::{
-    Buffer, BufferInfo, BufferView, Context, Handle, IndexedResource, MemoryVisibility,
-    ShaderResource,
+    cmd::Executable, Buffer, BufferInfo, BufferView, CommandStream, Context, Handle, IndexedResource, MemoryVisibility, ShaderResource
 };
+use tare::utils::StagedBuffer;
 use std::time::Instant;
+
+use crate::error::FurikakeError;
 
 use super::{ReservedBinding, ReservedItem};
 #[repr(C)]
@@ -13,19 +15,17 @@ struct TimeData {
 
 pub struct ReservedTiming {
     last_time: Instant,
-    buffer: Handle<Buffer>,
+    buffer: StagedBuffer,
 }
 
 impl ReservedTiming {
     pub fn new(ctx: &mut Context) -> Self {
-        let buffer = ctx
-            .make_buffer(&BufferInfo {
+        let buffer = StagedBuffer::new(ctx, BufferInfo {
                 debug_name: "[FURIKAKE] Timing Buffer",
                 byte_size: std::mem::size_of::<TimeData>() as u32,
                 visibility: MemoryVisibility::CpuAndGpu,
                 ..Default::default()
-            })
-            .expect("Unable to make timing buffer!");
+            });
 
         Self {
             last_time: Instant::now(),
@@ -33,8 +33,8 @@ impl ReservedTiming {
         }
     }
 
-    pub fn buffer(&self) -> Handle<Buffer> {
-        self.buffer
+    pub fn buffer(&self) -> StagedBuffer {
+        self.buffer.clone()
     }
 
     pub fn set_last_time(&mut self, instant: Instant) {
@@ -47,18 +47,14 @@ impl ReservedItem for ReservedTiming {
         "meshi_timing".to_string()
     }
 
-    fn update(&mut self, ctx: &mut Context) -> Result<(), crate::error::FurikakeError> {
-        let s = ctx
-            .map_buffer_mut::<TimeData>(BufferView::new(self.buffer))
-            .map_err(crate::error::FurikakeError::buffer_map_failed)?;
+    fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+        let s = self.buffer.as_slice_mut::<TimeData>();
         let now = std::time::Instant::now();
         s[0].current_time_ms = now.elapsed().as_secs_f32() * 1000.0;
         s[0].frame_time_ms = (now - self.last_time).as_secs_f32() * 1000.0;
         self.last_time = now;
-        ctx.unmap_buffer(self.buffer)
-            .map_err(crate::error::FurikakeError::buffer_unmap_failed)?;
 
-        Ok(())
+        Ok(self.buffer.sync_up().end())
     }
 
     fn binding(&self) -> ReservedBinding {
@@ -66,8 +62,8 @@ impl ReservedItem for ReservedTiming {
             binding: 0,
             resources: vec![IndexedResource {
                 resource: ShaderResource::ConstBuffer(BufferView {
-                    handle: self.buffer,
-                    size: (std::mem::size_of::<f32>() * 2) as u64,
+                    handle: self.buffer.device().handle,
+                    size: (std::mem::size_of::<TimeData>) as u64,
                     offset: 0,
                 }),
                 slot: 0,

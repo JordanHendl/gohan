@@ -4,6 +4,7 @@ use driver::command::CopyBuffer;
 
 use crate::transient::TransientAllocator;
 
+#[derive(Clone)]
 pub struct StagedBuffer {
     device: BufferView,
     host: BufferView,
@@ -70,7 +71,7 @@ impl StagedBuffer {
         self.host
     }
 
-    pub fn as_slice<T>(&mut self) -> &'static [T] {
+    pub fn as_slice<T>(&self) -> &'static [T] {
         let (ptr, len) = self.mapped;
         let ptr = ptr as *const T;
         let len = len / std::mem::size_of::<T>();
