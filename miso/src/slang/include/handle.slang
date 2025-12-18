@@ -1,15 +1,12 @@
-namespace miso {
-
 struct Handle {
-  uint16_t m_id;
-  uint16_t m_gen;
+  uint m_id;
+  uint m_gen;
 
   bool valid() {
-    return m_id != 65535;
+    return m_id != 0xFFFFu;
   }
 
-  int32_t id() {
-    return (int32_t)m_id;
+  int id() {
+    return int(m_id);
   }
-}
-}
+};

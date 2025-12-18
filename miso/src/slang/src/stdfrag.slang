@@ -19,10 +19,10 @@ bool valid_color(float4 color) {
   return color.x != 0.0 && color.y != 0.0 && color.z != 0.0 && color.w != 0.0;
 }
 
-float4 process_lights(const FSInput i, float4 in_color) {
-  float3 color = in_color.xyz;
-  for(uint idx = 0; idx < 1024; idx++) {
-    let light = bless_lights[idx];
+  float4 process_lights(const FSInput i, float4 in_color) {
+    float3 color = in_color.xyz;
+    for(uint idx = 0; idx < 1024; idx++) {
+      Light light = bless_lights[idx];
     
     if(light.dir_light.valid()) {
        float3 norm = i.normal;
@@ -40,7 +40,7 @@ FSOutput main(FSInput input)
 {
     FSOutput output;
     if(per_obj.material.base_color.valid()) {
-      output.color = miso::sample_texture(per_obj.material.base_color.id(), input.tex_coords); 
+      output.color = sample_texture(per_obj.material.base_color.id(), input.tex_coords);
     } else if(valid_color(per_obj.material.base_color_factor)) {
       output.color = float4(per_obj.material.base_color_factor);
     } else {
@@ -50,7 +50,7 @@ FSOutput main(FSInput input)
     output.color = process_lights(input, output.color);
 
     if(per_obj.material.emissive.valid()) {
-      output.color *= miso::sample_texture(per_obj.material.emissive.id(), input.tex_coords); 
+      output.color *= sample_texture(per_obj.material.emissive.id(), input.tex_coords);
     } else if(valid_color(per_obj.material.emissive_factor)) {
       output.color *= float4(per_obj.material.emissive_factor);
     }

@@ -5,9 +5,7 @@ edition = "2021"
 
 [dependencies]
 bento = {path = "../bento"}
-
-[build-dependencies]
-walkdir = "2.4.0"
+dashi = {git = "https://github.com/JordanHendl/dashi"}
 
 [package.metadata.slang]
 # Defaults for SLANG_SRC_DIR and SLANG_OUT_DIR
