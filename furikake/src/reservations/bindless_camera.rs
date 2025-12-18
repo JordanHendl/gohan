@@ -3,17 +3,17 @@
 use std::ptr::NonNull;
 
 use dashi::{
-    BufferInfo, BufferView, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource,
+    cmd::Executable, BufferInfo, BufferUsage, BufferView, CommandStream, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource
 };
+use tare::utils::StagedBuffer;
 
-use crate::types::Camera;
+use crate::{error::FurikakeError, types::Camera};
 
 use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessCamera {
     ctx: NonNull<Context>,
-    device_camera_data: Vec<IndexedResource>,
-    host_camera_data: Vec<NonNull<Camera>>,
+    data: StagedBuffer,
     available: Vec<u16>,
 }
 
@@ -21,77 +21,27 @@ impl ReservedBindlessCamera {
     pub fn new(ctx: &mut Context) -> Self {
         const START_SIZE: usize = 512;
 
-        let mut d_data = Vec::with_capacity(START_SIZE);
-        let mut h_data = Vec::with_capacity(START_SIZE);
         let available: Vec<u16> = (0..START_SIZE as u16).collect();
-
-        for i in 0..START_SIZE {
-            let default = [Camera::default()];
-            let buf = ctx
-                .make_buffer(&BufferInfo {
-                    debug_name: &format!("[FURIKAKE] Bindless Camera {}", i),
-                    byte_size: std::mem::size_of::<Camera>() as u32,
-                    visibility: dashi::MemoryVisibility::CpuAndGpu,
-                    usage: dashi::BufferUsage::STORAGE,
-                    initial_data: Some(unsafe { default.align_to::<u8>().1 }),
-                })
-                .expect("Failed making camera buffer");
-
-            let h = ctx
-                .map_buffer_mut::<Camera>(BufferView::new(buf))
-                .expect("Failed to map buffer");
-            let nncam = NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for camera map!");
-
-            h_data.push(nncam);
-            d_data.push(IndexedResource {
-                resource: ShaderResource::StorageBuffer(BufferView::new(buf)),
-                slot: i as u32,
-            });
-        }
+        let data = StagedBuffer::new(
+            ctx,
+            BufferInfo {
+                debug_name: "[FURIKAKE] Camera Buffer",
+                byte_size: std::mem::size_of::<Camera>() as u32 * START_SIZE as u32,
+                visibility: Default::default(),
+                usage: BufferUsage::ALL,
+                initial_data: None,
+            },
+        );
 
         Self {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
-            device_camera_data: d_data,
-            host_camera_data: h_data,
+            data,
             available,
         }
     }
 
-    pub fn extend(&mut self) {
-        let ctx: &mut Context = unsafe { self.ctx.as_mut() };
-        if self.available.is_empty() {
-            const EXTENSION_SIZE: usize = 128;
-            let start = self.host_camera_data.len();
-            let end = start + EXTENSION_SIZE;
-            for i in start..end {
-                let default = [Camera::default()];
-                let buf = ctx
-                    .make_buffer(&BufferInfo {
-                        debug_name: &format!("[FURIKAKE] Bindless Camera {}", i),
-                        byte_size: std::mem::size_of::<Camera>() as u32,
-                        visibility: dashi::MemoryVisibility::CpuAndGpu,
-                        usage: dashi::BufferUsage::STORAGE,
-                        initial_data: Some(unsafe { default.align_to::<u8>().1 }),
-                    })
-                    .expect("Failed making camera buffer");
-
-                let h = ctx
-                    .map_buffer_mut::<Camera>(BufferView::new(buf))
-                    .expect("Failed to map buffer");
-                let nncam =
-                    NonNull::new(h.as_mut_ptr()).expect("NonNull failed check for camera map!");
-
-                self.host_camera_data.push(nncam);
-                self.device_camera_data.push(IndexedResource {
-                    resource: ShaderResource::StorageBuffer(BufferView::new(buf)),
-                    slot: i as u32,
-                });
-            }
-        }
-    }
-
     pub fn remove_camera(&mut self, camera: Handle<Camera>) {
-        if camera.valid() && (camera.slot as usize) < self.device_camera_data.len() {
+        if camera.valid() && (camera.slot as usize) < 512 {
             self.available.push(camera.slot);
         }
     }
@@ -99,18 +49,17 @@ impl ReservedBindlessCamera {
     pub fn add_camera(&mut self) -> Handle<Camera> {
         if let Some(id) = self.available.pop() {
             return Handle::new(id, 0);
-        } else {
-            self.extend();
-            return self.add_camera();
         }
+
+        return Handle::new(0, 0);
     }
 
     pub fn camera(&self, handle: Handle<Camera>) -> &Camera {
-        unsafe { self.host_camera_data[handle.slot as usize].as_ref() }
+        &self.data.as_slice()[handle.slot as usize]
     }
 
     pub fn camera_mut(&mut self, handle: Handle<Camera>) -> &mut Camera {
-        unsafe { self.host_camera_data[handle.slot as usize].as_mut() }
+        &mut self.data.as_slice_mut()[handle.slot as usize]
     }
 }
 
@@ -119,13 +68,16 @@ impl ReservedItem for ReservedBindlessCamera {
         "meshi_bindless_camera".to_string()
     }
 
-    fn update(&mut self, _ctx: &mut Context) -> Result<(), crate::error::FurikakeError> {
-        Ok(())
+    fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+        Ok(self.data.sync_up().end())
     }
 
     fn binding(&self) -> ReservedBinding {
         return table_binding_from_indexed(IndexedBindingInfo {
-            resources: &self.device_camera_data,
+            resources: &[IndexedResource {
+                resource: ShaderResource::StorageBuffer(self.data.device().into()),
+                slot: 0,
+            }],
             binding: 0,
         });
     }
@@ -171,8 +123,6 @@ mod tests {
             cam.position = Vec3::new(1.0, 2.0, 3.0);
             cam.rotation = Quat::from_rotation_y(1.0);
         }
-
-        cameras.update(&mut ctx).expect("update cameras");
 
         let cam = cameras.camera(handle);
         assert_eq!(cam.position, Vec3::new(1.0, 2.0, 3.0));

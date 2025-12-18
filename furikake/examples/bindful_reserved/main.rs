@@ -72,15 +72,9 @@ fn main() {
     let timing = state
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
-    let mapped = ctx
-        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
-        .expect("map timing buffer");
-
+    let mapped = timing.buffer().as_slice::<TimingData>();
     println!(
         "Timing snapshot -> current: {:.3}ms | frame: {:.3}ms",
         mapped[0].current_time_ms, mapped[0].frame_time_ms
     );
-
-    ctx.unmap_buffer(timing.buffer())
-        .expect("unmap timing buffer after read");
 }

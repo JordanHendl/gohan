@@ -1,3 +1,4 @@
+
 use dashi::{Handle, ImageView, Sampler};
 use glam::{Mat4, Quat, Vec3, Vec4};
 
@@ -79,7 +80,7 @@ pub const LIGHT_TYPE_AREA_RECT: u32 = 3;
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct GpuLight {
+pub struct Light {
     /// xyz = position (world space) for point/spot/area
     /// xyz = *unused* for directional
     /// w   = type (LIGHT_TYPE_*)
@@ -115,5 +116,6 @@ pub struct Material {
     pub metallic_roughness_texture_id: u16,
     pub occlusion_texture_id: u16,
     pub emissive_texture_id: u16,
+    pub render_mask: u16,
     pub _padding: u16,
 }

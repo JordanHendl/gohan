@@ -144,8 +144,8 @@ fn main() {
         .reserved_mut::<ReservedBindlessTransformations, _>(
             "meshi_bindless_transformations",
             |transforms| {
-                let handle = transforms.add_transformation();
-                transforms.transformation_mut(handle).transform =
+                let handle = transforms.add_transform();
+                transforms.transform_mut(handle).transform =
                     Mat4::from_translation(Vec3::new(4.0, 5.0, 6.0));
                 transform_handle = Some(handle);
             },
@@ -192,15 +192,11 @@ fn main() {
     let timing = state
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
-    let timing_map = ctx
-        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
-        .expect("map timing buffer");
+    let timing_map = timing.buffer().as_slice::<TimingData>();
     println!(
         "Timing snapshot -> current: {:.3}ms | frame: {:.3}ms",
         timing_map[0].current_time_ms, timing_map[0].frame_time_ms
     );
-    ctx.unmap_buffer(timing.buffer())
-        .expect("unmap timing buffer after read");
 
     let camera_handle = camera_handle.expect("camera handle");
     let transform_handle = transform_handle.expect("transform handle");
@@ -226,7 +222,7 @@ fn main() {
             "Transform[{}] translation: {:?}",
             transform_handle.slot,
             transforms
-                .transformation(transform_handle)
+                .transform(transform_handle)
                 .transform
                 .w_axis
                 .truncate()
@@ -264,7 +260,7 @@ fn main() {
         .reserved_mut::<ReservedBindlessTransformations, _>(
             "meshi_bindless_transformations",
             |transforms| {
-                let transform = transforms.transformation_mut(transform_handle);
+                let transform = transforms.transform_mut(transform_handle);
                 transform.transform =
                     Mat4::from_rotation_z(0.5) * Mat4::from_translation(Vec3::new(0.0, 1.0, 0.0));
             },
@@ -303,15 +299,11 @@ fn main() {
     let timing = state
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
-    let timing_map = ctx
-        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
-        .expect("map timing buffer");
+    let timing_map = timing.buffer().as_slice::<TimingData>();
     println!(
         "After runtime edits -> current: {:.3}ms | frame: {:.3}ms",
         timing_map[0].current_time_ms, timing_map[0].frame_time_ms
     );
-    ctx.unmap_buffer(timing.buffer())
-        .expect("unmap timing buffer after edits");
 
     let cameras = state
         .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
@@ -332,7 +324,7 @@ fn main() {
         "Transform[{}] translation after runtime edit: {:?}",
         transform_handle.slot,
         transforms
-            .transformation(transform_handle)
+            .transform(transform_handle)
             .transform
             .w_axis
             .truncate()

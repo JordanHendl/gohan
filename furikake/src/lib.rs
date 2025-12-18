@@ -68,14 +68,9 @@ mod tests {
             .reserved::<ReservedTiming>("meshi_timing")
             .expect("timing reference");
 
-        let mapped = ctx
-            .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
-            .expect("map timing buffer");
-
+        let mapped = timing.buffer().as_slice::<TimingData>();
         // Allow some wiggle room for the time spent running the test.
         assert!(mapped[0].frame_time_ms >= 1000.0);
-        ctx.unmap_buffer(timing.buffer())
-            .expect("unmap timing buffer after mutation");
     }
 
     #[test]
@@ -146,7 +141,7 @@ impl DefaultState {
     pub fn update(&mut self) -> Result<(), FurikakeError> {
         let ctx: &mut Context = unsafe { self.ctx.as_mut() };
         for iter in &mut self.reserved {
-            iter.1.update(ctx)?;
+            iter.1.update()?;
         }
         Ok(())
     }
@@ -197,7 +192,7 @@ impl DefaultState {
 
 const BINDLESS_STATE_NAMES: [&str; 5] = [
     "meshi_timing",
-    "meshi_bindless_camera",
+    "meshi_bindless_cameras",
     "meshi_bindless_textures",
     "meshi_bindless_transformations",
     "meshi_bindless_materials",
@@ -208,7 +203,7 @@ const BINDLESS_METADATA: [ReservedMetadata; 5] = [
         kind: BindGroupVariableType::Uniform,
     },
     ReservedMetadata {
-        name: "meshi_bindless_camera",
+        name: "meshi_bindless_cameras",
         kind: BindGroupVariableType::Storage,
     },
     ReservedMetadata {
@@ -281,7 +276,7 @@ impl BindlessState {
     pub fn update(&mut self) -> Result<(), FurikakeError> {
         let ctx: &mut Context = unsafe { self.ctx.as_mut() };
         for iter in &mut self.reserved {
-            iter.1.update(ctx)?;
+            iter.1.update()?;
         }
         Ok(())
     }

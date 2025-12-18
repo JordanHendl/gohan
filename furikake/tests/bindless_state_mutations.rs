@@ -44,7 +44,7 @@ fn mutates_all_bindless_reservations_across_frames() {
     let camera_handle = {
         let mut handle = None;
         state
-            .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_camera", |cameras| {
+            .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_cameras", |cameras| {
                 let h = cameras.add_camera();
                 let cam = cameras.camera_mut(h);
                 cam.position = Vec3::new(0.0, 1.0, 2.0);
@@ -61,8 +61,8 @@ fn mutates_all_bindless_reservations_across_frames() {
             .reserved_mut::<ReservedBindlessTransformations, _>(
                 "meshi_bindless_transformations",
                 |transforms| {
-                    let h = transforms.add_transformation();
-                    transforms.transformation_mut(h).transform =
+                    let h = transforms.add_transform();
+                    transforms.transform_mut(h).transform =
                         Mat4::from_translation(Vec3::new(3.0, 4.0, 5.0));
                     handle = Some(h);
                 },
@@ -113,7 +113,7 @@ fn mutates_all_bindless_reservations_across_frames() {
 
     {
         let cameras = state
-            .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
+            .reserved::<ReservedBindlessCamera>("meshi_bindless_cameras")
             .expect("camera reservation");
         let transforms = state
             .reserved::<ReservedBindlessTransformations>("meshi_bindless_transformations")
@@ -128,7 +128,7 @@ fn mutates_all_bindless_reservations_across_frames() {
         );
         assert_eq!(
             transforms
-                .transformation(transform_handle)
+                .transform(transform_handle)
                 .transform
                 .w_axis
                 .truncate(),
@@ -154,7 +154,7 @@ fn mutates_all_bindless_reservations_across_frames() {
         .expect("adjust timing delta");
 
     state
-        .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_camera", |cameras| {
+        .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_cameras", |cameras| {
             let cam = cameras.camera_mut(camera_handle);
             cam.position = Vec3::new(-1.0, 0.5, 4.0);
             cam.rotation = Quat::from_rotation_y(1.0);
@@ -165,7 +165,7 @@ fn mutates_all_bindless_reservations_across_frames() {
         .reserved_mut::<ReservedBindlessTransformations, _>(
             "meshi_bindless_transformations",
             |transforms| {
-                transforms.transformation_mut(transform_handle).transform =
+                transforms.transform_mut(transform_handle).transform =
                     Mat4::from_translation(Vec3::new(1.0, 2.0, 3.0));
             },
         )
@@ -200,15 +200,12 @@ fn mutates_all_bindless_reservations_across_frames() {
     let timing = state
         .reserved::<ReservedTiming>("meshi_timing")
         .expect("access reserved timing");
-    let timing_map = ctx
-        .map_buffer::<TimingData>(BufferView::new(timing.buffer()))
-        .expect("map timing");
+    let timing_map = timing.buffer().as_slice::<TimingData>();
     assert!(timing_map[0].frame_time_ms >= 150.0);
     assert!(timing_map[0].frame_time_ms < 500.0);
-    ctx.unmap_buffer(timing.buffer()).expect("unmap timing");
 
     let cameras = state
-        .reserved::<ReservedBindlessCamera>("meshi_bindless_camera")
+        .reserved::<ReservedBindlessCamera>("meshi_bindless_cameras")
         .expect("camera reservation");
     let transforms = state
         .reserved::<ReservedBindlessTransformations>("meshi_bindless_transformations")
@@ -223,7 +220,7 @@ fn mutates_all_bindless_reservations_across_frames() {
     );
     assert_eq!(
         transforms
-            .transformation(transform_handle)
+            .transform(transform_handle)
             .transform
             .w_axis
             .truncate(),

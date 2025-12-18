@@ -8,6 +8,7 @@ edition = "2024"
 glam = "0.24.0"  # For vector math (Vec2 and Vec3)
 dashi = {git = "https://github.com/JordanHendl/dashi"}
 bento = {path = "../bento"}
+tare = {path = "../tare"}
 
 [dev-dependencies]
 rand = "0.8"

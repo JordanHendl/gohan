@@ -7,7 +7,7 @@ pub mod camera;
 pub mod timing;
 pub use timing::*;
 
-use dashi::{Context, IndexedBindingInfo, IndexedResource};
+use dashi::{cmd::Executable, CommandStream, Context, IndexedBindingInfo, IndexedResource};
 use std::any::Any;
 
 pub enum ReservedBinding {
@@ -19,7 +19,7 @@ pub enum ReservedBinding {
 
 pub trait ReservedItem {
     fn name(&self) -> String;
-    fn update(&mut self, ctx: &mut Context) -> Result<(), crate::error::FurikakeError>;
+    fn update(&mut self) -> Result<CommandStream<Executable>, crate::error::FurikakeError>;
     fn binding(&self) -> ReservedBinding;
 
     fn as_any(&self) -> &dyn Any;

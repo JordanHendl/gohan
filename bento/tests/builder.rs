@@ -1,16 +1,15 @@
 use std::collections::HashMap;
-use std::ffi::c_void;
+use std::ffi::{CStr, c_void};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-
-use ash::vk;
 use bento::{
     CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang,
     builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
 };
 use dashi::gpu::vulkan::{Context, ContextInfo, GPUError};
 use dashi::{
-    BufferInfo, BufferUsage, BufferView, IndexedResource, MemoryVisibility, ShaderResource,
+    BufferInfo, BufferUsage, BufferView, DebugMessageSeverity, DebugMessageType, DebugMessenger,
+    DebugMessengerCreateInfo, IndexedResource, MemoryVisibility, ShaderResource,
 };
 use serial_test::serial;
 
@@ -161,7 +160,7 @@ struct ValidationGuard {
     original_validation: Option<String>,
     validation_flag: Arc<AtomicBool>,
     validation_ptr: Option<*const AtomicBool>,
-    debug_messenger: Option<vk::DebugUtilsMessengerEXT>,
+    debug_messenger: Option<DebugMessenger>,
 }
 
 impl ValidationGuard {
@@ -169,11 +168,12 @@ impl ValidationGuard {
         let validation_flag = Arc::new(AtomicBool::new(false));
         let validation_ptr = Arc::into_raw(Arc::clone(&validation_flag));
 
-        let messenger_info = vk::DebugUtilsMessengerCreateInfoEXT::builder()
-            .message_severity(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR)
-            .message_type(vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION)
-            .pfn_user_callback(Some(validation_error_callback))
-            .user_data(validation_ptr as *mut c_void);
+        let messenger_info = DebugMessengerCreateInfo {
+            message_severity: DebugMessageSeverity::ERROR,
+            message_type: DebugMessageType::VALIDATION,
+            user_callback: validation_error_callback,
+            user_data: validation_ptr as *mut c_void,
+        };
 
         let debug_messenger = ctx.create_debug_messenger(&messenger_info)?;
 
@@ -214,13 +214,13 @@ impl ValidationGuard {
 }
 
 unsafe extern "system" fn validation_error_callback(
-    message_severity: vk::DebugUtilsMessageSeverityFlagsEXT,
-    message_type: vk::DebugUtilsMessageTypeFlagsEXT,
-    _p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
+    message_severity: DebugMessageSeverity,
+    message_type: DebugMessageType,
+    _p_callback_data: &CStr,
     user_data: *mut c_void,
-) -> vk::Bool32 {
-    if message_severity.contains(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR)
-        && message_type.contains(vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION)
+) -> bool {
+    if message_severity.contains(DebugMessageSeverity::ERROR)
+        && message_type.contains(DebugMessageType::VALIDATION)
     {
         if let Some(flag) =
             (!user_data.is_null()).then(|| unsafe { &*(user_data as *const AtomicBool) })
@@ -229,7 +229,7 @@ unsafe extern "system" fn validation_error_callback(
         }
     }
 
-    vk::FALSE
+    false
 }
 
 fn compile_shader(stage: dashi::ShaderType, source: &str) -> CompilationResult {
