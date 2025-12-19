@@ -1,3 +1,5 @@
+use std::ptr::NonNull;
+
 use cmd::{CommandStream, Executable, PendingGraphics, Recording};
 use dashi::{execution::CommandRing, *};
 use driver::command::BeginRenderPass;
@@ -14,11 +16,33 @@ pub struct SubpassInfo {
 }
 
 pub struct RenderGraph {
-    alloc: TransientAllocator,
+    alloc: TransientAllocatorOwner,
     ring: CommandRing,
     passes: Vec<GraphPass>,
     cached_render_passes: Vec<Handle<RenderPass>>,
     cached_begins: Vec<BeginRenderPass>,
+}
+
+enum TransientAllocatorOwner {
+    Owned(TransientAllocator),
+    Borrowed(NonNull<TransientAllocator>),
+}
+
+impl TransientAllocatorOwner {
+    fn owned(ctx: &mut Context) -> Self {
+        Self::Owned(TransientAllocator::new(ctx))
+    }
+
+    fn borrowed(alloc: &mut TransientAllocator) -> Self {
+        Self::Borrowed(NonNull::from(alloc))
+    }
+
+    fn as_mut(&mut self) -> &mut TransientAllocator {
+        match self {
+            Self::Owned(alloc) => alloc,
+            Self::Borrowed(alloc) => unsafe { alloc.as_mut() },
+        }
+    }
 }
 
 struct StoredSubpass {
@@ -37,6 +61,20 @@ enum GraphPass {
 
 impl RenderGraph {
     pub fn new(ctx: &mut Context) -> Self {
+        Self::with_transient_allocator(ctx, None)
+    }
+
+    pub fn new_with_transient_allocator(
+        ctx: &mut Context,
+        allocator: &mut TransientAllocator,
+    ) -> Self {
+        Self::with_transient_allocator(ctx, Some(allocator))
+    }
+
+    fn with_transient_allocator(
+        ctx: &mut Context,
+        allocator: Option<&mut TransientAllocator>,
+    ) -> Self {
         let ring = ctx
             .make_command_ring(&CommandQueueInfo2 {
                 debug_name: "tare-render-graph",
@@ -45,7 +83,9 @@ impl RenderGraph {
             })
             .expect("Create command ring for render graph");
         Self {
-            alloc: TransientAllocator::new(ctx),
+            alloc: allocator
+                .map(TransientAllocatorOwner::borrowed)
+                .unwrap_or_else(|| TransientAllocatorOwner::owned(ctx)),
             ring,
             passes: Vec::new(),
             cached_render_passes: Vec::new(),
@@ -55,12 +95,12 @@ impl RenderGraph {
 
     // Make a transient image matching the parameters input.
     pub fn make_image(&mut self, info: &ImageInfo) -> ImageView {
-        self.alloc.make_image(info)
+        self.alloc.as_mut().make_image(info)
     }
 
     // Make a transient buffer matching the parameters input
     pub fn make_buffer(&mut self, info: &BufferInfo) -> BufferView {
-        self.alloc.make_buffer(info)
+        self.alloc.as_mut().make_buffer(info)
     }
 
     // Append a potential subpass
@@ -141,7 +181,7 @@ impl RenderGraph {
                 subpasses: std::slice::from_ref(&subpass_description),
             };
 
-            let render_pass = self.alloc.make_render_pass(&rp_info);
+            let render_pass = self.alloc.as_mut().make_render_pass(&rp_info);
 
             let mut begin = BeginRenderPass {
                 viewport: subpass.info.viewport,
@@ -206,7 +246,7 @@ impl RenderGraph {
             .expect("Failed to submit render graph commands");
 
         // Advance transient allocator
-        self.alloc.advance();
+        self.alloc.as_mut().advance();
         self.passes.clear();
         self.cached_render_passes.clear();
         self.cached_begins.clear();
