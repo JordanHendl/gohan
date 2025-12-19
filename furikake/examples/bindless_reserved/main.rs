@@ -45,9 +45,14 @@ fn compile_shader() -> bento::CompilationResult {
         } meshi_timing;
 
         struct Camera {
-            vec3 position;
+            mat4 world_from_camera;
+            mat4 projection;
+            vec2 viewport;
+            float near;
+            float far;
+            float fov_y_radians;
+            uint projection_kind;
             float _padding0;
-            vec4 rotation;
         };
         layout(set = 1, binding = 0) buffer Cameras {
             Camera cameras[];
@@ -79,7 +84,7 @@ fn compile_shader() -> bento::CompilationResult {
 
         void main() {
             float time_mix = meshi_timing.frame_time_ms * 0.001;
-            vec3 camera_dir = normalize(meshi_bindless_camera.cameras[0].rotation.xyz);
+            vec3 camera_dir = normalize(-meshi_bindless_camera.cameras[0].world_from_camera[2].xyz);
             uint texture_id = meshi_bindless_textures.textures[0].id;
             mat4 model = meshi_bindless_transformations.transforms[0];
             uint material_tex = meshi_bindless_materials.materials[0].base_color_texture_id;
@@ -217,7 +222,7 @@ fn main() {
         println!(
             "Camera[{}] position: {:?}",
             camera_handle.slot,
-            cameras.camera(camera_handle).position
+            cameras.camera(camera_handle).position()
         );
         println!(
             "Transform[{}] translation: {:?}",
@@ -252,8 +257,8 @@ fn main() {
     state
         .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_camera", |cameras| {
             let cam = cameras.camera_mut(camera_handle);
-            cam.position += Vec3::new(0.5, -0.25, 1.0);
-            cam.rotation = Quat::from_rotation_y(1.57);
+            cam.set_position(cam.position() + Vec3::new(0.5, -0.25, 1.0));
+            cam.set_rotation(Quat::from_rotation_y(1.57));
         })
         .expect("tweak camera per-frame");
 
@@ -319,7 +324,7 @@ fn main() {
     println!(
         "Camera[{}] position (mutated): {:?}",
         camera_handle.slot,
-        cameras.camera(camera_handle).position
+        cameras.camera(camera_handle).position()
     );
     println!(
         "Transform[{}] translation after runtime edit: {:?}",

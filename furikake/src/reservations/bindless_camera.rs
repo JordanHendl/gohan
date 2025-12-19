@@ -3,7 +3,8 @@
 use std::ptr::NonNull;
 
 use dashi::{
-    cmd::Executable, BufferInfo, BufferUsage, BufferView, CommandStream, Context, Handle, IndexedBindingInfo, IndexedResource, ShaderResource
+    BufferInfo, BufferUsage, BufferView, CommandStream, Context, Handle, IndexedBindingInfo,
+    IndexedResource, ShaderResource, cmd::Executable,
 };
 use tare::utils::StagedBuffer;
 
@@ -120,12 +121,12 @@ mod tests {
         let handle = cameras.add_camera();
         {
             let cam = cameras.camera_mut(handle);
-            cam.position = Vec3::new(1.0, 2.0, 3.0);
-            cam.rotation = Quat::from_rotation_y(1.0);
+            cam.set_position(Vec3::new(1.0, 2.0, 3.0));
+            cam.set_rotation(Quat::from_rotation_y(1.0));
         }
 
         let cam = cameras.camera(handle);
-        assert_eq!(cam.position, Vec3::new(1.0, 2.0, 3.0));
-        assert_eq!(cam.rotation, Quat::from_rotation_y(1.0));
+        assert_eq!(cam.position(), Vec3::new(1.0, 2.0, 3.0));
+        assert_eq!(cam.rotation(), Quat::from_rotation_y(1.0));
     }
 }
