@@ -46,8 +46,14 @@ fn compile_shader() -> bento::CompilationResult {
 
         struct Camera {
             vec3 position;
-            float _padding0;
+            uint projection_kind;
             vec4 rotation;
+            mat4 projection;
+            vec2 viewport;
+            float near;
+            float far;
+            float fov_y_radians;
+            float _padding0;
         };
         layout(set = 1, binding = 0) buffer Cameras {
             Camera cameras[];
