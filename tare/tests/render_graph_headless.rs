@@ -1,6 +1,7 @@
-use dashi::*;
 use dashi::driver::command::CopyImageBuffer;
+use dashi::*;
 use tare::graph::*;
+use tare::transient::TransientAllocator;
 
 #[test]
 fn headless_render_graph_executes_without_validation_noise() {
@@ -136,10 +137,54 @@ fn headless_render_graph_outputs_readable_image() {
         .map_buffer::<u8>(readback.into())
         .expect("map readback buffer")
         .to_vec();
-    context.unmap_buffer(readback).expect("unmap readback buffer");
+    context
+        .unmap_buffer(readback)
+        .expect("unmap readback buffer");
 
     assert_eq!(data.len() as u32, WIDTH * HEIGHT * 4);
     for chunk in data.chunks_exact(4) {
         assert_eq!(chunk, EXPECTED_COLOR);
     }
+}
+
+#[test]
+fn render_graph_can_reuse_allocator() {
+    unsafe {
+        std::env::set_var("DASHI_VALIDATION", "0");
+    }
+
+    let mut context = Context::headless(&Default::default()).expect("headless context");
+    let mut allocator = TransientAllocator::new(&mut context);
+
+    let mut graph = RenderGraph::new_with_transient_allocator(&mut context, &mut allocator);
+
+    let target = graph.make_image(&ImageInfo {
+        debug_name: "[ATTACHMENT]",
+        dim: [4, 4, 1],
+        ..Default::default()
+    });
+
+    graph.add_subpass(
+        &SubpassInfo {
+            viewport: Viewport::default(),
+            color_attachments: [Some(target), None, None, None, None, None, None, None],
+            depth_attachment: None,
+            clear_values: [
+                Some(ClearValue::Color([1.0, 0.0, 0.0, 1.0])),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            depth_clear: None,
+        },
+        |stream| stream,
+    );
+
+    graph.execute();
+
+    // Executing successfully proves the external allocator can be used without crashing.
 }
