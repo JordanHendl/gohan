@@ -17,9 +17,9 @@ impl Default for ProjectionKind {
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Camera {
-    pub position: Vec3,
-    pub projection_kind: ProjectionKind,
-    pub rotation: Quat,
+    /// Camera → world transform.
+    pub world_from_camera: Mat4,
+    /// Projection matrix (perspective or orthographic).
     pub projection: Mat4,
     /// Width/height of the render target this projection was built for.
     pub viewport: Vec2,
@@ -27,6 +27,7 @@ pub struct Camera {
     pub far: f32,
     /// Vertical field of view in radians when using perspective projection.
     pub fov_y_radians: f32,
+    pub projection_kind: ProjectionKind,
     /// Padding to keep the struct 16-byte aligned when used in buffers.
     pub _padding: f32,
 }
@@ -40,14 +41,13 @@ impl Default for Camera {
 impl Camera {
     pub fn new(position: Vec3, rotation: Quat) -> Self {
         let mut camera = Self {
-            position,
-            projection_kind: ProjectionKind::Perspective,
-            rotation,
+            world_from_camera: Mat4::from_rotation_translation(rotation, position),
             projection: Mat4::IDENTITY,
             viewport: Vec2::new(512.0, 512.0),
             near: 0.1,
             far: 1_000.0,
             fov_y_radians: std::f32::consts::FRAC_PI_4,
+            projection_kind: ProjectionKind::Perspective,
             _padding: 0.0,
         };
 
@@ -57,41 +57,66 @@ impl Camera {
 
     /// Point the camera at a target world position.
     pub fn look_at(&mut self, target: Vec3, up: Vec3) {
-        let forward = (target - self.position).normalize();
+        let forward = (target - self.position()).normalize();
 
         // glam's look_to_rh gives a view matrix (world → camera)
-        let view = Mat4::look_to_rh(self.position, forward, up);
+        let view = Mat4::look_to_rh(self.position(), forward, up);
 
-        // Convert view → camera transform → rotation
-        let world_from_camera = view.inverse();
-        let (_, rot, _) = world_from_camera.to_scale_rotation_translation();
-
-        self.rotation = rot;
+        self.world_from_camera = view.inverse();
     }
 
     /// Camera → world transform
     pub fn as_matrix(&self) -> Mat4 {
-        Mat4::from_rotation_translation(self.rotation, self.position)
+        self.world_from_camera
     }
 
     /// View matrix (world → camera)
     pub fn view_matrix(&self) -> Mat4 {
-        self.as_matrix().inverse()
+        self.world_from_camera.inverse()
     }
 
     /// Camera's forward (−Z in right-handed systems)
     pub fn forward(&self) -> Vec3 {
-        self.rotation * Vec3::NEG_Z
+        self.rotation() * Vec3::NEG_Z
     }
 
     /// Camera's right (+X)
     pub fn right(&self) -> Vec3 {
-        self.rotation * Vec3::X
+        self.rotation() * Vec3::X
     }
 
     /// Camera's up (+Y) – optional but convenient
     pub fn up(&self) -> Vec3 {
-        self.rotation * Vec3::Y
+        self.rotation() * Vec3::Y
+    }
+
+    /// Extract the camera position from its world transform.
+    pub fn position(&self) -> Vec3 {
+        let (_, _, translation) = self.world_from_camera.to_scale_rotation_translation();
+        translation
+    }
+
+    /// Extract the camera rotation from its world transform.
+    pub fn rotation(&self) -> Quat {
+        let (_, rotation, _) = self.world_from_camera.to_scale_rotation_translation();
+        rotation
+    }
+
+    /// Set only the camera position while keeping its rotation.
+    pub fn set_position(&mut self, position: Vec3) {
+        let rotation = self.rotation();
+        self.world_from_camera = Mat4::from_rotation_translation(rotation, position);
+    }
+
+    /// Set only the camera rotation while keeping its position.
+    pub fn set_rotation(&mut self, rotation: Quat) {
+        let position = self.position();
+        self.world_from_camera = Mat4::from_rotation_translation(rotation, position);
+    }
+
+    /// Replace the camera → world matrix directly.
+    pub fn set_transform(&mut self, world_from_camera: Mat4) {
+        self.world_from_camera = world_from_camera;
     }
 
     /// Change the projection to a perspective matrix.

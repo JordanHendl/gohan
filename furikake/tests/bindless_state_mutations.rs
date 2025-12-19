@@ -47,8 +47,8 @@ fn mutates_all_bindless_reservations_across_frames() {
             .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_cameras", |cameras| {
                 let h = cameras.add_camera();
                 let cam = cameras.camera_mut(h);
-                cam.position = Vec3::new(0.0, 1.0, 2.0);
-                cam.rotation = Quat::from_rotation_x(0.5);
+                cam.set_position(Vec3::new(0.0, 1.0, 2.0));
+                cam.set_rotation(Quat::from_rotation_x(0.5));
                 handle = Some(h);
             })
             .expect("mutate bindless camera");
@@ -123,7 +123,7 @@ fn mutates_all_bindless_reservations_across_frames() {
             .expect("materials reservation");
 
         assert_eq!(
-            cameras.camera(camera_handle).position,
+            cameras.camera(camera_handle).position(),
             Vec3::new(0.0, 1.0, 2.0)
         );
         assert_eq!(
@@ -156,8 +156,8 @@ fn mutates_all_bindless_reservations_across_frames() {
     state
         .reserved_mut::<ReservedBindlessCamera, _>("meshi_bindless_cameras", |cameras| {
             let cam = cameras.camera_mut(camera_handle);
-            cam.position = Vec3::new(-1.0, 0.5, 4.0);
-            cam.rotation = Quat::from_rotation_y(1.0);
+            cam.set_position(Vec3::new(-1.0, 0.5, 4.0));
+            cam.set_rotation(Quat::from_rotation_y(1.0));
         })
         .expect("animate camera");
 
@@ -215,7 +215,7 @@ fn mutates_all_bindless_reservations_across_frames() {
         .expect("material reservation");
 
     assert_eq!(
-        cameras.camera(camera_handle).position,
+        cameras.camera(camera_handle).position(),
         Vec3::new(-1.0, 0.5, 4.0)
     );
     assert_eq!(
