@@ -1,0 +1,9 @@
+[package]
+name = "slang-rs"
+version = "0.1.0"
+edition = "2024"
+links = "slang"
+description = "Rust bindings to the shaded Slang language compiler"
+build = "build.rs"
+
+[dependencies]
