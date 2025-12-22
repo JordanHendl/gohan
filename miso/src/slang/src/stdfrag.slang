@@ -4,57 +4,43 @@ import miso;
 
 struct FSInput
 {
-    float3 color : COLOR;
-    float3 position;
-    float3 normal;
-    float2 tex_coords;
+    [[vk::location(0)]] float3 world_pos : POSITION_WS;
+    [[vk::location(1)]] float3 world_normal : NORMAL_WS;
+    [[vk::location(2)]] float2 tex_coords : TEXCOORD0;
+    [[vk::location(3)]] float4 color : COLOR0;
+    [[vk::location(4)]] float4 world_tangent : TANGENT0;
 };
 
 struct FSOutput
 {
-    float4 color : SV_TARGET;
+    float4 position : SV_TARGET0;
+    float4 albedo : SV_TARGET1;
+    float4 normal : SV_TARGET2;
 };
 
-bool valid_color(float4 color) {
-  return color.x != 0.0 && color.y != 0.0 && color.z != 0.0 && color.w != 0.0;
+bool valid_texture(uint texture_id) {
+  return texture_id != 0xffff;
 }
-
-//  float4 process_lights(const FSInput i, float4 in_color) {
-//    float3 color = in_color.xyz;
-//    for(uint idx = 0; idx < 1024; idx++) {
-//      Light light = bless_lights[idx];
-//    
-//    if(light.dir_light.valid()) {
-//       float3 norm = i.normal;
-//       float3 light_dir = light.dir_light.get().direction.xyz;
-//       float3 diff = max(dot(-light_dir, norm), 0.0);
-//       color = color.xyz * diff;
-//    }
-//  }
-//
-//  return float4(color, in_color.a);
-//}
 
 [shader("fragment")]
 FSOutput main(FSInput input)
 {
     FSOutput output;
-//    if(per_obj.material.base_color.valid()) {
-//      output.color = sample_texture(per_obj.material.base_color.id(), input.tex_coords);
-//    } else if(valid_color(per_obj.material.base_color_factor)) {
-//      output.color = float4(per_obj.material.base_color_factor);
-//    } else {
-//      output.color = float4(input.color, 1.0); // Output the interpolated vertex color
-//    }
-//
-//    output.color = process_lights(input, output.color);
-//
-//    if(per_obj.material.emissive.valid()) {
-//      output.color *= sample_texture(per_obj.material.emissive.id(), input.tex_coords);
-//    } else if(valid_color(per_obj.material.emissive_factor)) {
-//      output.color *= float4(per_obj.material.emissive_factor);
-//    }
+    const Material material = meshi_bindless_materials[per_obj.material_id.id()];
 
+    float4 base_color = input.color;
+    if (valid_texture(material.base_color_texture_id)) {
+        base_color = sample_texture(material.base_color_texture_id, input.tex_coords);
+    }
+
+    const float3 n = normalize(input.world_normal);
+    const float3 t = normalize(input.world_tangent.xyz);
+    const float3 b = normalize(cross(n, t)) * input.world_tangent.w;
+    const float3 ortho_normal = normalize(cross(b, t));
+
+    output.position = float4(input.world_pos, 1.0);
+    output.albedo = base_color;
+    output.normal = float4(ortho_normal, 1.0);
     return output;
 }
 
