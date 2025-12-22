@@ -35,15 +35,15 @@ struct PerObjectInfo  {
 };
 
 // BINDLESS VARIABLES (match furikake's reserved bindless state)
-uniform Texture2D meshi_bindless_textures[] : register(t0, space2);
-uniform SamplerState meshi_bindless_samplers[] : register(s0, space7);
-uniform StructuredBuffer<Camera> meshi_bindless_cameras : register(t0, space1);
-uniform StructuredBuffer<Transformation> meshi_bindless_transformations : register(t0, space3);
-uniform StructuredBuffer<Material> meshi_bindless_materials : register(t0, space4);
-uniform StructuredBuffer<Light> meshi_bindless_lights : register(t0, space5);
+uniform Texture2D meshi_bindless_textures[] : register(t0, space1);
+uniform SamplerState meshi_bindless_samplers[] : register(s1, space1);
+uniform StructuredBuffer<Camera> meshi_bindless_cameras : register(t2, space1);
+uniform StructuredBuffer<Transformation> meshi_bindless_transformations : register(t3, space1);
+uniform StructuredBuffer<Material> meshi_bindless_materials : register(t4, space1);
+uniform StructuredBuffer<Light> meshi_bindless_lights : register(t5, space1);
 
 // PER OBJECT INFO
-uniform StructuredBuffer<PerObjectInfo> per_obj_ssbo : register(t0, space6);
+uniform StructuredBuffer<PerObjectInfo> per_obj_ssbo : register(t0, space2);
 
 static PerObjectInfo per_obj = per_obj_ssbo[0];
 
