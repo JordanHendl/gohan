@@ -186,7 +186,11 @@ mod tests {
             .as_ref()
             .expect("vertex layout missing");
 
-        let locations: Vec<_> = layout.entries.iter().map(|e| (e.location, &e.format)).collect();
+        let locations: Vec<_> = layout
+            .entries
+            .iter()
+            .map(|e| (e.location, &e.format))
+            .collect();
         let offsets: Vec<_> = layout.entries.iter().map(|e| e.offset).collect();
 
         assert_eq!(layout.stride, 64);
