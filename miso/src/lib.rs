@@ -138,4 +138,67 @@ mod tests {
             .any(|r| r.stage == dashi::ShaderType::Fragment));
         assert!(results.iter().all(|r| !r.spirv.is_empty()));
     }
+
+    #[test]
+    fn stddeferred_bindings_match_bindless_state() {
+        let results = stddeferred(&[]);
+        let vertex = results
+            .iter()
+            .find(|r| r.stage == dashi::ShaderType::Vertex)
+            .expect("vertex stage missing");
+        let fragment = results
+            .iter()
+            .find(|r| r.stage == dashi::ShaderType::Fragment)
+            .expect("fragment stage missing");
+
+        let vertex_sets: Vec<(u32, dashi::BindGroupVariableType)> = vertex
+            .variables
+            .iter()
+            .map(|v| (v.set, v.kind.var_type))
+            .collect();
+        assert_eq!(vertex_sets.len(), 3);
+        assert!(vertex_sets.contains(&(1, dashi::BindGroupVariableType::Storage)));
+        assert!(vertex_sets.contains(&(3, dashi::BindGroupVariableType::Storage)));
+        assert!(vertex_sets.contains(&(6, dashi::BindGroupVariableType::Storage)));
+
+        let fragment_sets: Vec<(u32, dashi::BindGroupVariableType)> = fragment
+            .variables
+            .iter()
+            .map(|v| (v.set, v.kind.var_type))
+            .collect();
+        assert_eq!(fragment_sets.len(), 4);
+        assert!(fragment_sets.contains(&(2, dashi::BindGroupVariableType::SampledImage)));
+        assert!(fragment_sets.contains(&(4, dashi::BindGroupVariableType::Storage)));
+        assert!(fragment_sets.contains(&(6, dashi::BindGroupVariableType::Storage)));
+        assert!(fragment_sets.contains(&(7, dashi::BindGroupVariableType::Uniform)));
+    }
+
+    #[test]
+    fn stddeferred_vertex_layout_matches_noren() {
+        let results = stddeferred(&[]);
+        let vertex = results
+            .iter()
+            .find(|r| r.stage == dashi::ShaderType::Vertex)
+            .expect("vertex stage missing");
+
+        let layout = vertex
+            .metadata
+            .vertex
+            .as_ref()
+            .expect("vertex layout missing");
+
+        let locations: Vec<_> = layout.entries.iter().map(|e| (e.location, &e.format)).collect();
+        let offsets: Vec<_> = layout.entries.iter().map(|e| e.offset).collect();
+
+        assert_eq!(layout.stride, 64);
+        assert!(matches!(layout.rate, dashi::VertexRate::Vertex));
+        assert_eq!(locations.len(), 5);
+        assert_eq!(locations[0], (0, &dashi::ShaderPrimitiveType::Vec3));
+        assert_eq!(locations[1], (1, &dashi::ShaderPrimitiveType::Vec3));
+        assert_eq!(locations[2], (2, &dashi::ShaderPrimitiveType::Vec4));
+        assert_eq!(locations[3], (3, &dashi::ShaderPrimitiveType::Vec2));
+        assert_eq!(locations[4], (4, &dashi::ShaderPrimitiveType::Vec4));
+
+        assert_eq!(offsets, vec![0, 12, 24, 40, 48]);
+    }
 }
