@@ -51,7 +51,7 @@ impl ReservedBindlessTransformations {
             return Handle::new(id, 0);
         }
 
-        return Handle::new(0, 0);
+        return Handle::new(u16::MAX, u16::MAX);
     }
 
     pub fn transform(&self, handle: Handle<Transformation>) -> &Transformation {
