@@ -15,10 +15,10 @@ pub struct SubpassInfo {
     pub depth_clear: Option<ClearValue>,
 }
 
-pub struct RenderGraph {
+pub struct RenderGraph<'a> {
     alloc: TransientAllocatorOwner,
     ring: CommandRing,
-    passes: Vec<GraphPass>,
+    passes: Vec<GraphPass<'a>>,
     cached_render_passes: Vec<Handle<RenderPass>>,
     cached_begins: Vec<BeginRenderPass>,
 }
@@ -45,35 +45,35 @@ impl TransientAllocatorOwner {
     }
 }
 
-struct StoredSubpass {
+struct StoredSubpass<'a> {
     info: SubpassInfo,
-    cb: Box<dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics>>,
+    cb: Box<dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics> + 'a>,
 }
 
-struct StoredComputePass {
-    cb: Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable>>,
+struct StoredComputePass<'a> {
+    cb: Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable> + 'a>,
 }
 
-enum GraphPass {
-    Render(StoredSubpass),
-    Compute(StoredComputePass),
+enum GraphPass<'a> {
+    Render(StoredSubpass<'a>),
+    Compute(StoredComputePass<'a>),
 }
 
-impl RenderGraph {
+impl<'a> RenderGraph<'a> {
     pub fn new(ctx: &mut Context) -> Self {
         Self::with_transient_allocator(ctx, None)
     }
 
     pub fn new_with_transient_allocator(
         ctx: &mut Context,
-        allocator: &mut TransientAllocator,
+        allocator: &'a mut TransientAllocator,
     ) -> Self {
         Self::with_transient_allocator(ctx, Some(allocator))
     }
 
     fn with_transient_allocator(
         ctx: &mut Context,
-        allocator: Option<&mut TransientAllocator>,
+        allocator: Option<&'a mut TransientAllocator>,
     ) -> Self {
         let ring = ctx
             .make_command_ring(&CommandQueueInfo2 {
@@ -106,7 +106,7 @@ impl RenderGraph {
     // Append a potential subpass
     pub fn add_subpass<F>(&mut self, info: &SubpassInfo, cb: F)
     where
-        F: FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics> + 'static,
+        F: FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics> + 'a,
     {
         self.passes.push(GraphPass::Render(StoredSubpass {
             info: info.clone(),
@@ -118,7 +118,7 @@ impl RenderGraph {
 
     pub fn add_compute_pass<F>(&mut self, cb: F)
     where
-        F: FnMut(CommandStream<Recording>) -> CommandStream<Executable> + 'static,
+        F: FnMut(CommandStream<Recording>) -> CommandStream<Executable> + 'a,
     {
         self.passes
             .push(GraphPass::Compute(StoredComputePass { cb: Box::new(cb) }));
