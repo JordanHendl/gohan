@@ -9,40 +9,38 @@ struct Material {
   Handle pad0;
 };
 
+struct Camera {
+  //todo
+
+};
+
 // Bindless textures (all available textures).
 struct TextureSamplerPair {
     Texture2D t;
     SamplerState s;
 };
 
-// Global settings (environment, rendering settings, etc.).
-struct GlobalInfo {
-  float app_time_ms;
-};
-
-// Per-frame data (camera, transformations, etc.).
-struct PerFrameInfo {
-  float4 camera_position;
-};
-
 // Dynamic per-frame data.
 struct PerObjectInfo  {
     float4x4 transform;          // Model matrix.
-    float4x4 viewproj;          // Model matrix.
-    Material material;
+    Handle scene_id;
+    Handle material_id;
+    Handle camera_id;
 };
 
+// BINDLESS VARIABLES
+uniform Texture2D meshi_bindless_textures[] : register(t0, space0);
+uniform SamplerState meshi_bindless_samplers[] : register(s0, space1);
+uniform StructuredBuffer<Material> meshi_bindless_materials : register(t0, space2);
+uniform StructuredBuffer<Camera> meshi_bindless_cameras : register(t0, space3);
+uniform StructuredBuffer<Light> meshi_bindless_lights : register(t0, space4);
 
+// PER OBJECT INFO
+uniform StructuredBuffer<PerObjectInfo> per_obj_ssbo : register(t0, space5);
 
-uniform Texture2D bless_textures[] : register(t0, space0);
-uniform SamplerState bless_samplers[] : register(s0, space1);
-
-uniform StructuredBuffer<Light> bless_lights : register(t0, space2);
-
-
-uniform StructuredBuffer<PerObjectInfo> per_obj_ssbo : register(t0, space3);
 static PerObjectInfo per_obj = per_obj_ssbo[0];
 
+// HELPERS
 float4 sample_texture(uint idx, float2 coords) {
-  return bless_textures[idx].Sample(bless_samplers[idx], coords);
+  return meshi_bindless_textures[idx].Sample(meshi_bindless_samplers[idx], coords);
 }

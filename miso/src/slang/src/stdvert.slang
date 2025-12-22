@@ -26,12 +26,12 @@ VSOutput main(VSInput input)
 {
     VSOutput output;
 
-    float4x4 t = mul(per_obj.transform, per_obj.viewproj);
-    output.position = mul(float4(input.position.xyz, 1.0), t);
-    output.pos = output.position.xyz;
-    output.color = input.color.xyz;
-    output.normal = (mul(input.normal, per_obj.transform)).xyz;
-    output.tex_coords = input.tex_coords.xy;
+//    float4x4 t = mul(per_obj.transform, per_obj.viewproj);
+//    output.position = mul(float4(input.position.xyz, 1.0), t);
+//    output.pos = output.position.xyz;
+//    output.color = input.color.xyz;
+//    output.normal = (mul(input.normal, per_obj.transform)).xyz;
+//    output.tex_coords = input.tex_coords.xy;
     return output;
 }
 
