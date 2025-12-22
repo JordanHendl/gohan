@@ -1,0 +1,13 @@
+[package]
+name = "slang-rs"
+version = "0.1.0"
+edition = "2024"
+links = "slang"
+description = "Rust bindings to the shaded Slang language compiler"
+build = "build.rs"
+
+[dependencies]
+
+[build-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
