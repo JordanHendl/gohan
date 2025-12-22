@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
-members = ["miso", "furikake", "tare", "bento"]
+members = ["miso", "furikake", "tare", "bento", "slang-rs"]
+[patch.crates-io]
+shader-slang-sys = { path = "slang-rs/shader-slang-sys" }
 
 #[profile.dev.package."*"]
 #debug = false

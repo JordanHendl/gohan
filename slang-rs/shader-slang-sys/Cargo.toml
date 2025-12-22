@@ -1,0 +1,15 @@
+[package]
+name = "shader-slang-sys"
+version = "0.1.0"
+edition = "2024"
+description = "FFI bindings for the Slang shader language compiler (workspace override)"
+license = "MIT OR Apache-2.0"
+links = "slang"
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+bindgen = "0.70"
+ureq = { version = "2.9", default-features = false, features = ["tls"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }

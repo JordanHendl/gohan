@@ -1,0 +1,11 @@
+[package]
+name = "slang-rs"
+version = "0.1.0"
+edition = "2024"
+description = "Workspace bindings wrapper around Slang shader compiler"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+shader-slang = "0.1.0"
+thiserror = "1"
+tempfile = "3"
