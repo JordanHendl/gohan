@@ -1,5 +1,5 @@
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -17,9 +17,16 @@ fn main() {
 
     if let Some(dir) = env::var_os("SLANG_LIB_DIR") {
         let dir = PathBuf::from(dir);
-        println!("cargo:rustc-link-search=native={}", dir.display());
-        println!("cargo:rustc-link-lib=slang");
-        return;
+        if has_slang_library(&dir) {
+            println!("cargo:rustc-link-search=native={}", dir.display());
+            println!("cargo:rustc-link-lib=slang");
+            return;
+        }
+
+        println!(
+            "cargo:warning=SLANG_LIB_DIR was set to {} but no slang library was found; attempting to fetch it",
+            dir.display()
+        );
     }
 
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR not set"));
@@ -40,18 +47,24 @@ fn main() {
         }
     }
 
+    if !has_slang_library(&lib_dir) {
+        panic!(
+            "slang library could not be located in {} even after attempting to fetch it",
+            lib_dir.display()
+        );
+    }
+
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=slang");
 }
 
 fn has_slang_library(dir: &Path) -> bool {
-    [
-        OsStr::new("libslang.so"),
-        OsStr::new("libslang.dylib"),
-        OsStr::new("slang.dll"),
-    ]
-    .iter()
-    .any(|name| dir.join(name).exists())
+    dir.read_dir()
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .any(|entry| is_slang_library_name(entry.file_name()))
 }
 
 fn download_prebuilt(cache_dir: &Path, lib_dir: &Path, version: &str, target: &str) -> bool {
@@ -109,34 +122,20 @@ fn download_prebuilt(cache_dir: &Path, lib_dir: &Path, version: &str, target: &s
         return false;
     }
 
-    if let Some(lib_path) = find_prebuilt_library(&extract_root, lib_name) {
+    if let Some(lib_path) = find_prebuilt_library(&extract_root) {
         let dest = lib_dir.join(lib_name);
         fs::copy(&lib_path, &dest).expect("failed to copy prebuilt library into cache");
         return true;
     }
 
     println!(
-        "cargo:warning=prebuilt slang archive did not contain {lib_name}, falling back to source build"
+        "cargo:warning=prebuilt slang archive did not contain a slang library, falling back to source build"
     );
     false
 }
 
-fn find_prebuilt_library(root: &Path, lib_name: &str) -> Option<PathBuf> {
-    let mut stack = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(dir).ok()? {
-            let entry = entry.ok()?;
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if let Some(name) = path.file_name() {
-                if name == lib_name {
-                    return Some(path);
-                }
-            }
-        }
-    }
-    None
+fn find_prebuilt_library(root: &Path) -> Option<PathBuf> {
+    find_library_recursive(root)
 }
 
 fn unpack_archive(archive_path: &Path, destination: &Path) -> zip::result::ZipResult<()> {
@@ -211,22 +210,34 @@ fn build_slang_from_source(cache_dir: &Path, repo_url: &str, rev: &str) {
 }
 
 fn find_built_library(build_dir: &Path) -> Option<PathBuf> {
-    let candidates = ["bin", "lib", "Release", "build"];
-    for relative in candidates.iter() {
-        let dir = build_dir.join(relative);
-        if dir.is_dir() {
-            for entry in dir.read_dir().ok()? {
-                let entry = entry.ok()?;
-                let path = entry.path();
-                if let Some(name) = path.file_name() {
-                    if name == "libslang.so" || name == "libslang.dylib" || name == "slang.dll" {
-                        return Some(path);
-                    }
-                }
+    find_library_recursive(build_dir)
+}
+
+fn find_library_recursive(root: &Path) -> Option<PathBuf> {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        for entry in fs::read_dir(&dir).ok()? {
+            let entry = entry.ok()?;
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if is_slang_library_name(entry.file_name()) {
+                return Some(path);
             }
         }
     }
     None
+}
+
+fn is_slang_library_name(name: OsString) -> bool {
+    if let Some(name) = name.to_str() {
+        name == "slang.dll"
+            || name.starts_with("libslang.so")
+            || name.starts_with("libslang.dylib")
+            || name == "libslang.a"
+    } else {
+        false
+    }
 }
 
 fn run(command: &mut Command) {
