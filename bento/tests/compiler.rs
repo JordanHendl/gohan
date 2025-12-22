@@ -269,3 +269,25 @@ fn slang_binding_names_follow_declaration_order() -> Result<(), BentoError> {
 
     Ok(())
 }
+
+#[test]
+fn slang_accepts_vulkan_attributes() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let request = sample_request(ShaderLang::Slang);
+    let path = "tests/fixtures/slang_vulkan_attrs.slang";
+
+    let mut bindings: Vec<_> = compiler
+        .compile_from_file(path, &request)?
+        .variables
+        .into_iter()
+        .map(|var| ((var.set, var.kind.binding), var.name))
+        .collect();
+
+    bindings.sort_by_key(|((set, binding), _)| (*set, *binding));
+
+    assert_eq!(bindings.len(), 2);
+    assert_eq!(bindings[0], ((0, 1), "Params".to_string()));
+    assert_eq!(bindings[1], ((3, 0), "outputData".to_string()));
+
+    Ok(())
+}

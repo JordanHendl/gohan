@@ -9,6 +9,7 @@ use rspirv::{
     spirv,
 };
 use serde::{Deserialize, Serialize};
+use slang_rs::{OptimizationLevel as SlangOptimization, Stage as SlangStage};
 use shaderc::{
     CompileOptions, Compiler as ShadercCompiler, EnvVersion, OptimizationLevel as ShadercOpt,
     ShaderKind, SourceLanguage, SpirvVersion, TargetEnv,
@@ -353,16 +354,44 @@ impl Compiler {
         let source = std::str::from_utf8(shader)
             .map_err(|_| BentoError::InvalidInput("Shader source is not valid UTF-8".into()))?;
 
-        let mut options = CompileOptions::new()
-            .ok_or_else(|| BentoError::ShaderCompilation("Failed to create options".into()))?;
-
         let resolved_lang = if matches!(request.lang, ShaderLang::Infer) {
             infer_shader_lang(source, path)
         } else {
             request.lang
         };
 
-        options.set_source_language(source_language(resolved_lang)?);
+        let mut spirv = if resolved_lang == ShaderLang::Slang {
+            compile_with_slang(source, request)?
+        } else {
+            self.compile_with_shaderc(source, request, resolved_lang)?
+        };
+        let spirv_bytes = spirv_words_to_bytes(&spirv);
+        let variables = reflect_bindings(spirv_bytes, source, resolved_lang)?;
+        spirv = rewrite_spirv_binding_names(&spirv, &variables)?;
+        let spirv_bytes = spirv_words_to_bytes(&spirv);
+        let metadata = reflect_metadata(spirv_bytes)?;
+
+        Ok(CompilationResult {
+            name: request.name.clone(),
+            file: None,
+            lang: resolved_lang,
+            stage: request.stage,
+            variables,
+            metadata,
+            spirv,
+        })
+    }
+
+    fn compile_with_shaderc(
+        &self,
+        source: &str,
+        request: &Request,
+        lang: ShaderLang,
+    ) -> Result<Vec<u32>, BentoError> {
+        let mut options = CompileOptions::new()
+            .ok_or_else(|| BentoError::ShaderCompilation("Failed to create options".into()))?;
+
+        options.set_source_language(source_language(lang)?);
         options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_2 as u32);
         options.set_target_spirv(SpirvVersion::V1_3);
         options.set_optimization_level(shaderc_optimization(request.optimization));
@@ -388,23 +417,16 @@ impl Compiler {
             )
             .map_err(|e| BentoError::ShaderCompilation(e.to_string()))?;
 
-        let mut spirv = artifact.as_binary().to_vec();
-        let spirv_bytes = spirv_words_to_bytes(&spirv);
-        let variables = reflect_bindings(spirv_bytes, source, resolved_lang)?;
-        spirv = rewrite_spirv_binding_names(&spirv, &variables)?;
-        let spirv_bytes = spirv_words_to_bytes(&spirv);
-        let metadata = reflect_metadata(spirv_bytes)?;
-
-        Ok(CompilationResult {
-            name: request.name.clone(),
-            file: None,
-            lang: resolved_lang,
-            stage: request.stage,
-            variables,
-            metadata,
-            spirv,
-        })
+        Ok(artifact.as_binary().to_vec())
     }
+}
+
+fn compile_with_slang(source: &str, request: &Request) -> Result<Vec<u32>, BentoError> {
+    let stage = slang_stage(request.stage)?;
+    let optimization = slang_optimization(request.optimization);
+
+    slang_rs::compile_to_spirv(source, stage, optimization, request.debug_symbols, &request.defines)
+        .map_err(|e| BentoError::ShaderCompilation(e.to_string()))
 }
 
 fn shader_stage(stage: dashi::ShaderType) -> Result<ShaderKind, BentoError> {
@@ -415,6 +437,25 @@ fn shader_stage(stage: dashi::ShaderType) -> Result<ShaderKind, BentoError> {
         dashi::ShaderType::All => Err(BentoError::InvalidInput(
             "ShaderType::All is not supported for compilation".into(),
         )),
+    }
+}
+
+fn slang_stage(stage: dashi::ShaderType) -> Result<SlangStage, BentoError> {
+    match stage {
+        dashi::ShaderType::Vertex => Ok(SlangStage::Vertex),
+        dashi::ShaderType::Fragment => Ok(SlangStage::Fragment),
+        dashi::ShaderType::Compute => Ok(SlangStage::Compute),
+        dashi::ShaderType::All => Err(BentoError::InvalidInput(
+            "ShaderType::All is not supported for compilation".into(),
+        )),
+    }
+}
+
+fn slang_optimization(level: OptimizationLevel) -> SlangOptimization {
+    match level {
+        OptimizationLevel::None => SlangOptimization::None,
+        OptimizationLevel::FileSize => SlangOptimization::Default,
+        OptimizationLevel::Performance => SlangOptimization::High,
     }
 }
 
@@ -740,12 +781,12 @@ fn glsl_declaration_from(source: &str, start: usize) -> Option<String> {
 
 fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
     let resource_regex = Regex::new(
-        r"(?m)^\s*(?:RW?Texture\w+|RW?StructuredBuffer|StructuredBuffer|ConstantBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|AccelerationStructure|Texture\w+|Sampler\w*)[^;\n]*?\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*([tubcs]?)\s*(\d+)\s*\))?",
+        r"(?m)^\s*(?:\[\[vk::binding\(\s*(\d+)\s*,\s*(\d+)\s*\)\]\]\s*(?:\n\s*)?)?(?:RW?Texture\w+|RW?StructuredBuffer|StructuredBuffer|ConstantBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|AccelerationStructure|Texture\w+|Sampler\w*)[^;\n]*?\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*([tubcs]?)\s*(\d+)\s*\))?",
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid HLSL reflection regex: {e}")))?;
 
     let cbuffer_regex = Regex::new(
-        r"(?m)^\s*(?:cbuffer|ConstantBuffer)\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*b(\d+)\s*\))?",
+        r"(?m)^\s*(?:\[\[vk::binding\(\s*(\d+)\s*,\s*(\d+)\s*\)\]\]\s*(?:\n\s*)?)?(?:cbuffer|ConstantBuffer)\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*b(\d+)\s*\))?",
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid constant buffer regex: {e}")))?;
 
@@ -790,7 +831,8 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
 
     struct ParsedBinding {
         name: String,
-        set: u32,
+        explicit_set: Option<u32>,
+        explicit_binding: Option<u32>,
         order: usize,
         register_index: Option<u32>,
         register_type: RegisterType,
@@ -802,20 +844,27 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
         let Some(declaration_match) = captures.get(0) else {
             continue;
         };
-        let name = captures
+        let explicit_binding = captures
             .get(1)
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let explicit_set = captures
+            .get(2)
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let name = captures
+            .get(3)
             .map(|m| m.as_str().to_string())
             .unwrap_or_else(|| format!("resource_{index}"));
         let register_letter = captures
-            .get(2)
+            .get(4)
             .and_then(|m| m.as_str().chars().next())
             .filter(|c| c.is_ascii_alphabetic());
-        let register_index = captures.get(3).and_then(|m| m.as_str().parse::<u32>().ok());
+        let register_index = captures.get(5).and_then(|m| m.as_str().parse::<u32>().ok());
         let register_type = classify_register(declaration_match.as_str(), register_letter);
 
         parsed_bindings.push(ParsedBinding {
             name,
-            set: 0,
+            explicit_set,
+            explicit_binding,
             order: index,
             register_index,
             register_type,
@@ -824,8 +873,14 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
 
     let starting_index = parsed_bindings.len();
     for (offset, captures) in cbuffer_regex.captures_iter(source).enumerate() {
-        let fallback_name = captures
+        let explicit_binding = captures
             .get(1)
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let explicit_set = captures
+            .get(2)
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let fallback_name = captures
+            .get(3)
             .map(|m| m.as_str().to_string())
             .unwrap_or_else(|| format!("cbuffer_{offset}"));
         let Some(declaration_match) = captures.get(0) else {
@@ -833,11 +888,12 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
         };
         let declaration = declaration_match.as_str();
         let name = extract_binding_name(declaration).unwrap_or(fallback_name);
-        let register_index = captures.get(2).and_then(|m| m.as_str().parse::<u32>().ok());
+        let register_index = captures.get(4).and_then(|m| m.as_str().parse::<u32>().ok());
 
         parsed_bindings.push(ParsedBinding {
             name,
-            set: 0,
+            explicit_set,
+            explicit_binding,
             order: starting_index + offset,
             register_index,
             register_type: RegisterType::CBuffer,
@@ -856,10 +912,20 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
     });
 
     let mut bindings = Vec::new();
-    for (binding_index, parsed) in parsed_bindings.iter().enumerate() {
+    let mut next_binding = 0u32;
+    for parsed in parsed_bindings.iter() {
+        let binding_value = parsed
+            .explicit_binding
+            .unwrap_or_else(|| {
+                let value = next_binding;
+                next_binding += 1;
+                value
+            });
+        next_binding = next_binding.max(binding_value + 1);
+
         bindings.push(SourceBinding {
-            set: parsed.set,
-            binding: Some(binding_index as u32),
+            set: parsed.explicit_set.unwrap_or(0),
+            binding: Some(binding_value),
             name: parsed.name.clone(),
             order: parsed.order,
         });
@@ -902,7 +968,18 @@ fn extract_binding_name(declaration: &str) -> Option<String> {
             .map(|m| m.as_str().to_string())
     }
 
-    let trimmed = declaration.trim();
+    let mut trimmed = declaration.trim();
+
+    // Skip leading attributes like `[[vk::binding(... )]]` so that the identifier
+    // search finds the actual declaration name instead of the attribute name.
+    while let Some(stripped) = trimmed.strip_prefix("[[") {
+        if let Some(end) = stripped.find("]]") {
+            trimmed = stripped[end + 2..].trim_start();
+            continue;
+        }
+
+        break;
+    }
 
     if trimmed.contains('{') {
         let before_brace = trimmed
