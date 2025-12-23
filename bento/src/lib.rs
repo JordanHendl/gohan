@@ -362,6 +362,7 @@ impl Compiler {
             request.lang
         };
 
+        options.set_auto_combined_image_sampler(true);
         options.set_source_language(source_language(resolved_lang)?);
         options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_2 as u32);
         options.set_target_spirv(SpirvVersion::V1_3);

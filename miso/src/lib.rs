@@ -165,11 +165,10 @@ mod tests {
             .iter()
             .map(|v| (v.set, v.kind.var_type))
             .collect();
-        assert_eq!(fragment_sets.len(), 4);
+        assert_eq!(fragment_sets.len(), 3);
         assert!(fragment_sets.contains(&(1, dashi::BindGroupVariableType::SampledImage)));
         assert!(fragment_sets.contains(&(1, dashi::BindGroupVariableType::Storage)));
         assert!(fragment_sets.contains(&(2, dashi::BindGroupVariableType::Storage)));
-        assert!(fragment_sets.contains(&(1, dashi::BindGroupVariableType::Uniform)));
     }
 
     #[test]

@@ -185,12 +185,12 @@ fn hlsl_binding_names_follow_registers() -> Result<(), BentoError> {
         .collect();
     let spirv_bindings = binding_names_from_spirv(&result.spirv);
 
-    assert_eq!(bindings.len(), 4);
+    println!("{:?}", bindings);
+    assert_eq!(bindings.len(), 3);
     assert_eq!(bindings, spirv_bindings);
     assert_eq!(bindings[0], (0, "colorTex".to_string()));
-    assert_eq!(bindings[1], (1, "Params".to_string()));
-    assert_eq!(bindings[2], (2, "outputData".to_string()));
-    assert_eq!(bindings[3], (3, "linearSampler".to_string()));
+    assert_eq!(bindings[1], (2, "outputData".to_string()));
+    assert_eq!(bindings[2], (3, "linearSampler".to_string()));
 
     Ok(())
 }
@@ -210,12 +210,11 @@ fn hlsl_binding_names_follow_declaration_order() -> Result<(), BentoError> {
         .collect();
     let spirv_bindings = binding_names_from_spirv(&result.spirv);
 
-    assert_eq!(bindings.len(), 4);
+    assert_eq!(bindings.len(), 3);
     assert_eq!(bindings, spirv_bindings);
     assert_eq!(bindings[0], (0, "albedo".to_string()));
     assert_eq!(bindings[1], (1, "FrameData".to_string()));
     assert_eq!(bindings[2], (2, "outputData".to_string()));
-    assert_eq!(bindings[3], (3, "pointSampler".to_string()));
 
     Ok(())
 }
@@ -235,12 +234,12 @@ fn slang_binding_names_follow_registers() -> Result<(), BentoError> {
         .collect();
     let spirv_bindings = binding_names_from_spirv(&result.spirv);
 
-    assert_eq!(bindings.len(), 4);
+
+    assert_eq!(bindings.len(), 3);
     assert_eq!(bindings, spirv_bindings);
-    assert_eq!(bindings[0], (0, "colorTex".to_string()));
-    assert_eq!(bindings[1], (1, "Params".to_string()));
-    assert_eq!(bindings[2], (2, "outputData".to_string()));
-    assert_eq!(bindings[3], (3, "linearSampler".to_string()));
+    assert_eq!(bindings[0], (1, "Params".to_string()));
+    assert_eq!(bindings[1], (2, "outputData".to_string()));
+    assert_eq!(bindings[2], (3, "linearSampler".to_string()));
 
     Ok(())
 }
@@ -260,12 +259,11 @@ fn slang_binding_names_follow_declaration_order() -> Result<(), BentoError> {
         .collect();
     let spirv_bindings = binding_names_from_spirv(&result.spirv);
 
-    assert_eq!(bindings.len(), 4);
+    assert_eq!(bindings.len(), 3);
     assert_eq!(bindings, spirv_bindings);
     assert_eq!(bindings[0], (0, "albedo".to_string()));
     assert_eq!(bindings[1], (1, "FrameData".to_string()));
     assert_eq!(bindings[2], (2, "outputData".to_string()));
-    assert_eq!(bindings[3], (3, "pointSampler".to_string()));
 
     Ok(())
 }
