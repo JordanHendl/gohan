@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["miso", "furikake", "tare", "bento"]
+members = ["miso", "furikake", "tare", "bento", "slang-rs"]
 
 #[profile.dev.package."*"]
 #debug = false
