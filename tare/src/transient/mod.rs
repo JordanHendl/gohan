@@ -108,7 +108,7 @@ struct ReuseEntry<H> {
 }
 
 const MAX_FRAMES: usize = 3;
-const UNUSED_RETIRE_THRESHOLD: usize = MAX_FRAMES * 3;
+const UNUSED_RETIRE_THRESHOLD: usize = MAX_FRAMES;
 pub struct TransientAllocator {
     ctx: NonNull<Context>,
     images: Ring<Vec<(ImageKey, Handle<Image>)>, MAX_FRAMES>,
@@ -119,6 +119,10 @@ pub struct TransientAllocator {
     available_buffers: HashMap<BufferKey, Vec<ReuseEntry<Handle<Buffer>>>>,
     available_renderpasses: HashMap<u64, Vec<ReuseEntry<Handle<RenderPass>>>>,
     available_semaphores: Vec<ReuseEntry<Handle<Semaphore>>>,
+    free_images: Vec<Handle<Image>>,
+    free_buffers: Vec<Handle<Buffer>>,
+    free_renderpasses: Vec<Handle<RenderPass>>,
+    free_semaphores: Vec<Handle<Semaphore>>,
 }
 
 impl TransientAllocator {
@@ -133,6 +137,10 @@ impl TransientAllocator {
             available_buffers: HashMap::new(),
             available_renderpasses: HashMap::new(),
             available_semaphores: Vec::new(),
+            free_images: Vec::new(),
+            free_buffers: Vec::new(),
+            free_renderpasses: Vec::new(),
+            free_semaphores: Vec::new(),
         }
     }
 
@@ -172,14 +180,17 @@ impl TransientAllocator {
         }
     }
 
-    fn prune_unused(&mut self) {
-        let ctx = unsafe { self.ctx.as_mut() };
+    fn collect_unused(&mut self) {
+        let mut free_images = Vec::new();
+        let mut free_buffers = Vec::new();
+        let mut free_renderpasses = Vec::new();
+        let mut free_semaphores = Vec::new();
 
         self.available_images.retain(|_, list| {
             list.retain_mut(|entry| {
                 entry.age += 1;
                 if entry.age >= UNUSED_RETIRE_THRESHOLD {
-                    ctx.destroy_image(entry.handle);
+                    free_images.push(entry.handle);
                     false
                 } else {
                     true
@@ -192,7 +203,7 @@ impl TransientAllocator {
             list.retain_mut(|entry| {
                 entry.age += 1;
                 if entry.age >= UNUSED_RETIRE_THRESHOLD {
-                    ctx.destroy_buffer(entry.handle);
+                    free_buffers.push(entry.handle);
                     false
                 } else {
                     true
@@ -205,7 +216,7 @@ impl TransientAllocator {
             list.retain_mut(|entry| {
                 entry.age += 1;
                 if entry.age >= UNUSED_RETIRE_THRESHOLD {
-                    ctx.destroy_render_pass(entry.handle);
+                    free_renderpasses.push(entry.handle);
                     false
                 } else {
                     true
@@ -217,18 +228,37 @@ impl TransientAllocator {
         self.available_semaphores.retain_mut(|entry| {
             entry.age += 1;
             if entry.age >= UNUSED_RETIRE_THRESHOLD {
-                ctx.destroy_semaphore(entry.handle);
+                free_semaphores.push(entry.handle);
                 false
             } else {
                 true
             }
         });
+
+        self.free_images.extend(free_images);
+        self.free_buffers.extend(free_buffers);
+        self.free_renderpasses.extend(free_renderpasses);
+        self.free_semaphores.extend(free_semaphores);
     }
 
     pub fn advance(&mut self) {
-        // advance
+        let ctx = unsafe { self.ctx.as_mut() };
+
+        for handle in self.free_images.drain(..) {
+            ctx.destroy_image(handle);
+        }
+        for handle in self.free_buffers.drain(..) {
+            ctx.destroy_buffer(handle);
+        }
+        for handle in self.free_renderpasses.drain(..) {
+            ctx.destroy_render_pass(handle);
+        }
+        for handle in self.free_semaphores.drain(..) {
+            ctx.destroy_semaphore(handle);
+        }
+
         self.check_for_stale();
-        self.prune_unused();
+        self.collect_unused();
         self.images.advance();
         self.buffers.advance();
         self.renderpasses.advance();
@@ -242,7 +272,10 @@ impl TransientAllocator {
             .available_images
             .get_mut(&key)
             .and_then(|list| list.pop())
-            .map(|entry| entry.handle)
+            .map(|mut entry| {
+                entry.age = 0;
+                entry.handle
+            })
             .unwrap_or_else(|| {
                 unsafe { self.ctx.as_mut() }
                     .make_image(info)
@@ -264,7 +297,10 @@ impl TransientAllocator {
             .available_buffers
             .get_mut(&key)
             .and_then(|list| list.pop())
-            .map(|entry| entry.handle)
+            .map(|mut entry| {
+                entry.age = 0;
+                entry.handle
+            })
             .unwrap_or_else(|| {
                 unsafe { self.ctx.as_mut() }
                     .make_buffer(info)
@@ -283,7 +319,10 @@ impl TransientAllocator {
             .available_buffers
             .get_mut(&key)
             .and_then(|list| list.pop())
-            .map(|entry| entry.handle)
+            .map(|mut entry| {
+                entry.age = 0;
+                entry.handle
+            })
             .unwrap_or_else(|| {
                 unsafe { self.ctx.as_mut() }
                     .make_buffer(info)
@@ -308,7 +347,10 @@ impl TransientAllocator {
             .available_renderpasses
             .get_mut(&hash)
             .and_then(|list| list.pop())
-            .map(|entry| entry.handle)
+            .map(|mut entry| {
+                entry.age = 0;
+                entry.handle
+            })
             .unwrap_or_else(|| {
                 unsafe { self.ctx.as_mut() }
                     .make_render_pass(info)
@@ -324,7 +366,10 @@ impl TransientAllocator {
         let handle = self
             .available_semaphores
             .pop()
-            .map(|entry| entry.handle)
+            .map(|mut entry| {
+                entry.age = 0;
+                entry.handle
+            })
             .unwrap_or_else(|| unsafe { self.ctx.as_mut() }.make_semaphore().expect("Make transient semaphore"));
 
         self.semaphores.data_mut().push(handle);
@@ -384,6 +429,22 @@ impl Drop for TransientAllocator {
 
         for sem in self.available_semaphores.drain(..) {
             ctx.destroy_semaphore(sem.handle);
+        }
+
+        for handle in self.free_images.drain(..) {
+            ctx.destroy_image(handle);
+        }
+
+        for handle in self.free_buffers.drain(..) {
+            ctx.destroy_buffer(handle);
+        }
+
+        for handle in self.free_renderpasses.drain(..) {
+            ctx.destroy_render_pass(handle);
+        }
+
+        for handle in self.free_semaphores.drain(..) {
+            ctx.destroy_semaphore(handle);
         }
     }
 }
