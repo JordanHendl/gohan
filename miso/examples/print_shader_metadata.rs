@@ -25,7 +25,7 @@ fn print_bindings(bindings: &[ShaderVariable]) {
 
     for var in bindings {
         println!(
-            "  - Name: {} (set {}, binding {}, count {}, type {:?})",
+            "  - {} (set {}, binding {}, count {}, type {:?})",
             var.name, var.set, var.kind.binding, var.kind.count, var.kind.var_type
         );
     }

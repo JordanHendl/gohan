@@ -77,7 +77,7 @@ pub fn stddeferred(defines: &[String]) -> Vec<CompilationResult> {
         lang: ShaderLang::Slang,
         stage: dashi::ShaderType::Vertex,
         optimization: OptimizationLevel::Performance,
-        debug_symbols: false,
+        debug_symbols: true,
         defines: define_map,
     };
 
