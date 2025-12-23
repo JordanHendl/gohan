@@ -247,6 +247,15 @@ impl PSO {
             bindings: &bindings,
         });
     }
+
+    pub fn tables(&self) -> [Option<Handle<BindTable>>; 4] {
+        let mut out: [Option<Handle<BindTable>>; 4] = [None; 4];
+        for (i, x) in self.bind_table.iter().take(4).enumerate() {
+            out[i] = Some(*x);
+        }
+
+        out
+    }
 }
 
 #[derive(Clone, Copy)]
