@@ -235,20 +235,14 @@ fn main() {
 
         graph.add_subpass(&draw_pass, move |stream| {
             let mut s = stream.bind_graphics_pipeline(pso);
-
+            
+            s.update_viewport(&viewport);
             s.draw_indexed(&DrawIndexed {
                 vertices: vertex.handle,
                 indices: indices.handle,
                 index_count: 3,
                 ..Default::default()
             });
-
-            s.blit_images(&BlitImage {
-                src: target.img,
-                dst: img.img,
-                ..Default::default()
-            });
-            s.prepare_for_presentation(img.img);
 
             s.unbind_graphics_pipeline()
         });
