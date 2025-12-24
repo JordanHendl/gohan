@@ -235,17 +235,16 @@ fn main() {
         let (img, sem, _idx, _good) = context.acquire_new_image(&mut display).unwrap();
 
         graph.add_subpass(&draw_pass, move |stream| {
-            let mut s = stream.bind_graphics_pipeline(pso);
-
-            s.update_viewport(&viewport);
-            s.draw_indexed(&DrawIndexed {
-                vertices: vertex.into(),
-                indices: indices.into(),
-                index_count: 3,
-                ..Default::default()
-            });
-
-            s.unbind_graphics_pipeline()
+            stream
+                .bind_graphics_pipeline(pso)
+                .update_viewport(&viewport)
+                .draw_indexed(&DrawIndexed {
+                    vertices: vertex.into(),
+                    indices: indices.into(),
+                    index_count: 3,
+                    ..Default::default()
+                })
+                .unbind_graphics_pipeline()
         });
 
         graph.execute_with(&SubmitInfo {
@@ -253,15 +252,16 @@ fn main() {
             signal_sems: &[sems[0]],
         });
         
-        let mut cmd = CommandStream::new().begin();
-        cmd.blit_images(&BlitImage {
-            src: target.img,
-            dst: img.img,
-            ..Default::default()
-        });
-
-        cmd.prepare_for_presentation(img.img);
-        CommandDispatch::dispatch(cmd.end(), &SubmitInfo2 {
+        let cmd = CommandStream::new()
+            .begin()
+            .blit_images(&BlitImage {
+                src: target.img,
+                dst: img.img,
+                ..Default::default()
+            })
+            .prepare_for_presentation(img.img)
+            .end();
+        CommandDispatch::dispatch(cmd, &SubmitInfo2 {
             wait_sems: [sems[0], Default::default(), Default::default(), Default::default()],
             signal_sems: [sems[1], Default::default(), Default::default(), Default::default()],
         }).expect("Failed to dispatch command!");

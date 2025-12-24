@@ -116,14 +116,16 @@ fn headless_render_graph_outputs_readable_image() {
 
     copy_ring
         .record(|cmd| {
-            let mut stream = CommandStream::new().begin();
-            stream.copy_image_to_buffer(&CopyImageBuffer {
-                src: target.img,
-                dst: readback,
-                range: SubresourceRange::default(),
-                dst_offset: 0,
-            });
-            stream.end().append(cmd);
+            let stream = CommandStream::new()
+                .begin()
+                .copy_image_to_buffer(&CopyImageBuffer {
+                    src: target.img,
+                    dst: readback,
+                    range: SubresourceRange::default(),
+                    dst_offset: 0,
+                })
+                .end();
+            stream.append(cmd);
         })
         .expect("record readback commands");
 

@@ -283,47 +283,47 @@ fn main() {
         .expect("create command ring");
 
     ring.record(|list| {
-        let mut stream = CommandStream::new().begin();
-        let mut draw = stream.begin_drawing(&BeginDrawing {
-            viewport: Viewport {
-                area: FRect2D {
-                    w: 640.0,
-                    h: 480.0,
+        let stream = CommandStream::new()
+            .begin()
+            .begin_drawing(&BeginDrawing {
+                viewport: Viewport {
+                    area: FRect2D {
+                        w: 640.0,
+                        h: 480.0,
+                        ..Default::default()
+                    },
+                    scissor: Rect2D {
+                        w: 640,
+                        h: 480,
+                        ..Default::default()
+                    },
                     ..Default::default()
                 },
-                scissor: Rect2D {
-                    w: 640,
-                    h: 480,
-                    ..Default::default()
-                },
+                pipeline,
+                color_attachments: [Some(target_view), None, None, None, None, None, None, None],
+                depth_attachment: None,
+                clear_values: [
+                    Some(ClearValue::Color([0.05, 0.05, 0.1, 1.0])),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                ],
                 ..Default::default()
-            },
-            pipeline,
-            color_attachments: [Some(target_view), None, None, None, None, None, None, None],
-            depth_attachment: None,
-            clear_values: [
-                Some(ClearValue::Color([0.05, 0.05, 0.1, 1.0])),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ],
-            ..Default::default()
-        });
+            })
+            .draw_indexed(&DrawIndexed {
+                vertices: vertex_buffer,
+                indices: index_buffer,
+                index_count: indices.len() as u32,
+                bind_groups: [None, None, None, None],
+                bind_tables: [Some(timing_bind_table), None, None, None],
+                ..Default::default()
+            })
+            .stop_drawing();
 
-        draw.draw_indexed(&DrawIndexed {
-            vertices: vertex_buffer,
-            indices: index_buffer,
-            index_count: indices.len() as u32,
-            bind_groups: [None, None, None, None],
-            bind_tables: [Some(timing_bind_table), None, None, None],
-            ..Default::default()
-        });
-
-        stream = draw.stop_drawing();
         stream.end().append(list);
     })
     .expect("record draw commands");

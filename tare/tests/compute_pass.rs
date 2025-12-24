@@ -33,16 +33,15 @@ fn compute_pass_dispatches_and_writes_buffer() {
     source.size = std::mem::size_of::<u32>() as u64;
 
     graph.add_compute_pass(move |stream| {
-        let mut stream = stream;
-        stream.copy_buffers(&CopyBuffer {
-            src: source.handle,
-            dst: output.handle,
-            src_offset: 0,
-            dst_offset: 0,
-            amount: std::mem::size_of::<u32>() as u32,
-        });
-
-        stream.end()
+        stream
+            .copy_buffers(&CopyBuffer {
+                src: source.handle,
+                dst: output.handle,
+                src_offset: 0,
+                dst_offset: 0,
+                amount: std::mem::size_of::<u32>() as u32,
+            })
+            .end()
     });
     graph.execute();
 
