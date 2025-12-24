@@ -86,26 +86,18 @@ impl StagedBuffer {
     }
 
     pub fn sync_up(&self) -> CommandStream<Recording> {
-        let mut cmd = CommandStream::new().begin();
-
-        cmd.copy_buffers(&CopyBuffer {
+        CommandStream::new().begin().copy_buffers(&CopyBuffer {
             src: self.host.handle,
             dst: self.device.handle,
             ..Default::default()
-        });
-
-        cmd
+        })
     }
 
     pub fn sync_down(&self) -> CommandStream<Recording> {
-        let mut cmd = CommandStream::new().begin();
-
-        cmd.copy_buffers(&CopyBuffer {
+        CommandStream::new().begin().copy_buffers(&CopyBuffer {
             src: self.device.handle,
             dst: self.host.handle,
             ..Default::default()
-        });
-
-        cmd
+        })
     }
 }
