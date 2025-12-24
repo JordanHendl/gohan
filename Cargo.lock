@@ -466,7 +466,7 @@ dependencies = [
 [[package]]
 name = "dashi"
 version = "0.1.0"
-source = "git+https://github.com/JordanHendl/dashi#4c0620abbb1df2887c11d8e33c5b16e97ae5dd9e"
+source = "git+https://github.com/JordanHendl/dashi#514c306aee6636aadb649b64dbb03acb6f1476d3"
 dependencies = [
  "anyhow",
  "ash",
@@ -1659,9 +1659,9 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.23.0"
+version = "3.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d31c77bdf42a745371d260a26ca7163f1e0924b64afa0b688e61b5a9fa02f16"
+checksum = "655da9c7eb6305c55742045d5a8d2037996d61d8de95806335c7c86ce0f82e9c"
 dependencies = [
  "fastrand",
  "getrandom 0.3.4",

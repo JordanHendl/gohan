@@ -108,7 +108,7 @@ struct ReuseEntry<H> {
 }
 
 const MAX_FRAMES: usize = 3;
-const UNUSED_RETIRE_THRESHOLD: usize = MAX_FRAMES;
+const UNUSED_RETIRE_THRESHOLD: usize = MAX_FRAMES * 12;
 pub struct TransientAllocator {
     ctx: NonNull<Context>,
     images: Ring<Vec<(ImageKey, Handle<Image>)>, MAX_FRAMES>,

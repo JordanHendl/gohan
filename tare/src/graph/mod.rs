@@ -93,6 +93,14 @@ impl RenderGraph {
         }
     }
 
+    pub fn make_semaphore(&mut self) -> Handle<Semaphore> {
+        self.alloc.as_mut().make_semaphore()
+    }
+
+    pub fn make_semaphores(&mut self, count: usize) -> Vec<Handle<Semaphore>> {
+        self.alloc.as_mut().make_semaphores(count)
+    }
+
     // Make a transient image matching the parameters input.
     pub fn make_image(&mut self, info: &ImageInfo) -> ImageView {
         self.alloc.as_mut().make_image(info)

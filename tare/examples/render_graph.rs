@@ -5,7 +5,7 @@ use tare::graph::*;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
 use winit::platform::run_return::EventLoopExtRunReturn;
-
+use dashi::execution::command_dispatch::*;
 #[repr(C)]
 struct Vertex {
     position: [f32; 2],
@@ -14,7 +14,6 @@ struct Vertex {
 
 fn main() {
     let mut context = Context::new(&Default::default()).unwrap();
-    let mut graph = RenderGraph::new(&mut context);
     let compiler = Compiler::new().expect("create bento compiler");
 
     let vert_source = r#"
@@ -84,30 +83,23 @@ fn main() {
 
     let indices: [u32; 3] = [0, 1, 2];
 
-    let vertex = graph.make_buffer(&BufferInfo {
+    let vertex = context.make_buffer(&BufferInfo {
         debug_name: "render-graph-vertices",
         byte_size: (std::mem::size_of::<Vertex>() * vertices.len()) as u32,
         visibility: MemoryVisibility::Gpu,
         usage: BufferUsage::VERTEX,
         initial_data: unsafe { Some(vertices.align_to::<u8>().1) },
         ..Default::default()
-    });
+    }).unwrap();
 
-    let indices = graph.make_buffer(&BufferInfo {
+    let indices = context.make_buffer(&BufferInfo {
         debug_name: "render-graph-indices",
         byte_size: (std::mem::size_of::<u32>() * indices.len()) as u32,
         visibility: MemoryVisibility::Gpu,
         usage: BufferUsage::INDEX,
         initial_data: unsafe { Some(indices.align_to::<u8>().1) },
         ..Default::default()
-    });
-
-    let target = graph.make_image(&ImageInfo {
-        debug_name: "[ATTACHMENT]",
-        dim: [1024, 1024, 1],
-        format: Format::RGBA8,
-        ..Default::default()
-    });
+    }).unwrap();
 
     let p_layout = context
         .make_graphics_pipeline_layout(&GraphicsPipelineLayoutInfo {
@@ -184,26 +176,35 @@ fn main() {
         },
         ..Default::default()
     };
+    
+    CommandDispatch::init(&mut context).unwrap();
 
-    let draw_pass = SubpassInfo {
-        viewport,
-        color_attachments: [Some(target), None, None, None, None, None, None, None],
-        depth_attachment: None,
-        clear_values: [
-            Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        ],
-        depth_clear: None,
-    };
-
-    let sems = context.make_semaphores(1).unwrap();
+    let mut graph = RenderGraph::new(&mut context);
     'running: loop {
+        let sems = graph.make_semaphores(2);
+        let target = graph.make_image(&ImageInfo {
+            debug_name: "[ATTACHMENT]",
+            dim: [1024, 1024, 1],
+            format: Format::RGBA8,
+            ..Default::default()
+        });
+        let draw_pass = SubpassInfo {
+            viewport,
+            color_attachments: [Some(target), None, None, None, None, None, None, None],
+            depth_attachment: None,
+            clear_values: [
+                Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            ],
+            depth_clear: None,
+        };
+
         {
             let mut should_exit = false;
             let event_loop = display.winit_event_loop();
@@ -235,11 +236,11 @@ fn main() {
 
         graph.add_subpass(&draw_pass, move |stream| {
             let mut s = stream.bind_graphics_pipeline(pso);
-            
+
             s.update_viewport(&viewport);
             s.draw_indexed(&DrawIndexed {
-                vertices: vertex.handle,
-                indices: indices.handle,
+                vertices: vertex.into(),
+                indices: indices.into(),
                 index_count: 3,
                 ..Default::default()
             });
@@ -251,7 +252,22 @@ fn main() {
             wait_sems: &[sem],
             signal_sems: &[sems[0]],
         });
+        
+        let mut cmd = CommandStream::new().begin();
+        cmd.blit_images(&BlitImage {
+            src: target.img,
+            dst: img.img,
+            ..Default::default()
+        });
 
-        context.present_display(&display, &[sems[0]]).unwrap();
+        cmd.prepare_for_presentation(img.img);
+        CommandDispatch::dispatch(cmd.end(), &SubmitInfo2 {
+            wait_sems: [sems[0], Default::default(), Default::default(), Default::default()],
+            signal_sems: [sems[1], Default::default(), Default::default(), Default::default()],
+        }).expect("Failed to dispatch command!");
+
+        context.present_display(&display, &[sems[1]]).unwrap();
+
+        CommandDispatch::tick().expect("Failed to tick Command Dispatch!");
     }
 }
