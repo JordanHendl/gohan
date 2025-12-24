@@ -1,11 +1,11 @@
 use bento::{Compiler, OptimizationLevel, Request, ShaderLang};
+use dashi::execution::command_dispatch::*;
 use dashi::*;
 use driver::command::{BlitImage, DrawIndexed};
 use tare::graph::*;
 use winit::event::{ElementState, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
 use winit::event_loop::ControlFlow;
 use winit::platform::run_return::EventLoopExtRunReturn;
-use dashi::execution::command_dispatch::*;
 #[repr(C)]
 struct Vertex {
     position: [f32; 2],
@@ -83,74 +83,32 @@ fn main() {
 
     let indices: [u32; 3] = [0, 1, 2];
 
-    let vertex = context.make_buffer(&BufferInfo {
-        debug_name: "render-graph-vertices",
-        byte_size: (std::mem::size_of::<Vertex>() * vertices.len()) as u32,
-        visibility: MemoryVisibility::Gpu,
-        usage: BufferUsage::VERTEX,
-        initial_data: unsafe { Some(vertices.align_to::<u8>().1) },
-        ..Default::default()
-    }).unwrap();
-
-    let indices = context.make_buffer(&BufferInfo {
-        debug_name: "render-graph-indices",
-        byte_size: (std::mem::size_of::<u32>() * indices.len()) as u32,
-        visibility: MemoryVisibility::Gpu,
-        usage: BufferUsage::INDEX,
-        initial_data: unsafe { Some(indices.align_to::<u8>().1) },
-        ..Default::default()
-    }).unwrap();
-
-    let p_layout = context
-        .make_graphics_pipeline_layout(&GraphicsPipelineLayoutInfo {
-            vertex_info: VertexDescriptionInfo {
-                entries: &[
-                    VertexEntryInfo {
-                        format: ShaderPrimitiveType::Vec2,
-                        location: 0,
-                        offset: 0,
-                    },
-                    VertexEntryInfo {
-                        format: ShaderPrimitiveType::Vec3,
-                        location: 1,
-                        offset: 8,
-                    },
-                ],
-                stride: std::mem::size_of::<Vertex>(),
-                rate: VertexRate::Vertex,
-            },
-            bg_layouts: [None, None, None, None],
-            bt_layouts: [None, None, None, None],
-            shaders: &[
-                PipelineShaderInfo {
-                    stage: ShaderType::Vertex,
-                    spirv: vert_shader.spirv.as_slice(),
-                    specialization: &[],
-                },
-                PipelineShaderInfo {
-                    stage: ShaderType::Fragment,
-                    spirv: frag_shader.spirv.as_slice(),
-                    specialization: &[],
-                },
-            ],
-            details: GraphicsPipelineDetails::default(),
-            debug_name: "render-graph-pipeline-layout",
+    let vertex = context
+        .make_buffer(&BufferInfo {
+            debug_name: "render-graph-vertices",
+            byte_size: (std::mem::size_of::<Vertex>() * vertices.len()) as u32,
+            visibility: MemoryVisibility::Gpu,
+            usage: BufferUsage::VERTEX,
+            initial_data: unsafe { Some(vertices.align_to::<u8>().1) },
+            ..Default::default()
         })
-        .expect("Make Pipeline Layout");
+        .unwrap();
 
-    let pso = context
-        .make_graphics_pipeline(&GraphicsPipelineInfo {
-            debug_name: "render-graph-pipeline",
-            layout: p_layout,
-            attachment_formats: vec![Format::RGBA8],
-            depth_format: None,
-            subpass_samples: SubpassSampleInfo {
-                color_samples: vec![SampleCount::default()],
-                depth_sample: None,
-            },
-            subpass_id: 0,
+    let indices = context
+        .make_buffer(&BufferInfo {
+            debug_name: "render-graph-indices",
+            byte_size: (std::mem::size_of::<u32>() * indices.len()) as u32,
+            visibility: MemoryVisibility::Gpu,
+            usage: BufferUsage::INDEX,
+            initial_data: unsafe { Some(indices.align_to::<u8>().1) },
+            ..Default::default()
         })
-        .expect("Make graphics pipeline");
+        .unwrap();
+    
+    let pso = bento::builder::GraphicsPipelineBuilder::new()
+        .vertex_compiled(Some(vert_shader))
+        .fragment_compiled(Some(frag_shader))
+        .build(&mut context).unwrap();
 
     let mut display = context
         .make_display(&DisplayInfo {
@@ -176,7 +134,7 @@ fn main() {
         },
         ..Default::default()
     };
-    
+
     CommandDispatch::init(&mut context).unwrap();
 
     let mut graph = RenderGraph::new(&mut context);
@@ -190,18 +148,9 @@ fn main() {
         });
         let draw_pass = SubpassInfo {
             viewport,
-            color_attachments: [Some(target), None, None, None, None, None, None, None],
+            color_attachments: fill![Some(target); None; 8],
             depth_attachment: None,
-            clear_values: [
-                Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])),
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-            ],
+            clear_values: fill![Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])), None; None; 8],
             depth_clear: None,
         };
 
@@ -236,7 +185,7 @@ fn main() {
 
         graph.add_subpass(&draw_pass, move |stream| {
             stream
-                .bind_graphics_pipeline(pso)
+                .bind_graphics_pipeline(pso.handle)
                 .update_viewport(&viewport)
                 .draw_indexed(&DrawIndexed {
                     vertices: vertex.into(),
@@ -251,7 +200,7 @@ fn main() {
             wait_sems: &[sem],
             signal_sems: &[sems[0]],
         });
-        
+
         let cmd = CommandStream::new()
             .begin()
             .blit_images(&BlitImage {
@@ -261,10 +210,23 @@ fn main() {
             })
             .prepare_for_presentation(img.img)
             .end();
-        CommandDispatch::dispatch(cmd, &SubmitInfo2 {
-            wait_sems: [sems[0], Default::default(), Default::default(), Default::default()],
-            signal_sems: [sems[1], Default::default(), Default::default(), Default::default()],
-        }).expect("Failed to dispatch command!");
+
+        CommandDispatch::dispatch(
+            cmd,
+            &SubmitInfo2 {
+                wait_sems: fill![
+                    sems[0];
+                    Default::default();
+                    4
+                ],
+                signal_sems: fill![
+                    sems[1];
+                    Default::default();
+                    4
+                ],
+            },
+        )
+        .expect("Failed to dispatch command!");
 
         context.present_display(&display, &[sems[1]]).unwrap();
 

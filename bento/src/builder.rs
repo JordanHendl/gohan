@@ -10,8 +10,8 @@ use dashi::{
     ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline, GraphicsPipelineDetails,
     GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo,
     ImageView, IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo,
-    SampleCount, SamplerInfo, ShaderInfo, ShaderResource, ShaderType, VertexDescriptionInfo,
-    VertexEntryInfo,
+    SampleCount, SamplerInfo, ShaderInfo, ShaderPrimitiveType, ShaderResource, ShaderType,
+    VertexDescriptionInfo, VertexEntryInfo,
 };
 
 use crate::{CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang};
@@ -604,16 +604,39 @@ impl GraphicsPipelineBuilder {
             })
             .ok()?;
 
+        let attachments: Vec<Format> = fragment
+            .metadata
+            .outputs
+            .iter()
+            .map(|iv| {
+                let fmt = iv.format.unwrap_or(ShaderPrimitiveType::Vec4);
+                match fmt {
+                    ShaderPrimitiveType::Vec2 => Format::RGB8,
+                    ShaderPrimitiveType::Vec3 => Format::RGB8,
+                    ShaderPrimitiveType::Vec4 => Format::RGBA8,
+                    ShaderPrimitiveType::IVec4 => Format::RGBA8,
+                    ShaderPrimitiveType::UVec4 => Format::RGBA8,
+                }
+            })
+            .collect();
+
+        let samples = attachments.iter().map(|_| {
+            SampleCount::S1
+        }).collect();
+
         let pipeline = ctx
             .make_graphics_pipeline(&GraphicsPipelineInfo {
                 layout,
-                attachment_formats: Vec::new(),
+                attachment_formats: attachments,
                 depth_format: None,
-                subpass_samples: dashi::SubpassSampleInfo::default(),
+                subpass_samples: dashi::SubpassSampleInfo {
+                    color_samples: samples,
+                    depth_sample: Default::default(),
+                },
                 subpass_id: 0,
                 debug_name: "bento_graphics_pipeline",
             })
-            .ok()?;
+            .unwrap();
 
         Some(PSO {
             layout,
