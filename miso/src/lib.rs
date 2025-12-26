@@ -157,8 +157,8 @@ mod tests {
             .map(|v| (v.set, v.kind.var_type))
             .collect();
         assert_eq!(vertex_sets.len(), 3);
+        assert!(vertex_sets.contains(&(0, dashi::BindGroupVariableType::Storage)));
         assert!(vertex_sets.contains(&(1, dashi::BindGroupVariableType::Storage)));
-        assert!(vertex_sets.contains(&(2, dashi::BindGroupVariableType::Storage)));
 
         let fragment_sets: Vec<(u32, dashi::BindGroupVariableType)> = fragment
             .variables
@@ -166,9 +166,9 @@ mod tests {
             .map(|v| (v.set, v.kind.var_type))
             .collect();
         assert_eq!(fragment_sets.len(), 3);
-        assert!(fragment_sets.contains(&(1, dashi::BindGroupVariableType::SampledImage)));
+        assert!(fragment_sets.contains(&(0, dashi::BindGroupVariableType::SampledImage)));
+        assert!(fragment_sets.contains(&(0, dashi::BindGroupVariableType::Storage)));
         assert!(fragment_sets.contains(&(1, dashi::BindGroupVariableType::Storage)));
-        assert!(fragment_sets.contains(&(2, dashi::BindGroupVariableType::Storage)));
     }
 
     #[test]
