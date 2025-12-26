@@ -211,7 +211,7 @@ fn resolve_binding_count(
 pub struct PSO {
     pub layout: Handle<GraphicsPipelineLayout>,
     pub handle: Handle<GraphicsPipeline>,
-    pub bind_table: Vec<Handle<BindTable>>,
+    pub bind_table: [Option<Handle<BindTable>>; 4],
     pub ctx: NonNull<Context>,
     table_bindings: HashMap<String, TableBinding>,
 }
@@ -249,12 +249,7 @@ impl PSO {
     }
 
     pub fn tables(&self) -> [Option<Handle<BindTable>>; 4] {
-        let mut out: [Option<Handle<BindTable>>; 4] = [None; 4];
-        for (i, x) in self.bind_table.iter().take(4).enumerate() {
-            out[i] = Some(*x);
-        }
-
-        out
+        self.bind_table
     }
 }
 
@@ -396,7 +391,7 @@ impl GraphicsPipelineBuilder {
 
         // Build bind table layouts and tables.
         let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None; 4];
-        let mut bind_tables = Vec::new();
+        let mut bind_tables: [Option<Handle<BindTable>>; 4] = [None; 4];
         let mut table_bindings = HashMap::new();
         let mut defaults = DefaultResources::default();
 
@@ -543,7 +538,9 @@ impl GraphicsPipelineBuilder {
                         },
                     );
                 }
-                bind_tables.push(table);
+                if (set as usize) < bind_tables.len() {
+                    bind_tables[set as usize] = Some(table);
+                }
             }
         }
 
@@ -655,7 +652,7 @@ impl GraphicsPipelineBuilder {
 pub struct CSO {
     pub layout: Handle<ComputePipelineLayout>,
     pub handle: Handle<ComputePipeline>,
-    pub bind_table: Vec<Handle<BindTable>>,
+    pub bind_table: [Option<Handle<BindTable>>; 4],
     pub ctx: NonNull<Context>,
     table_bindings: HashMap<String, TableBinding>,
 }
@@ -690,12 +687,7 @@ impl CSO {
     }
 
     pub fn tables(&self) -> [Option<Handle<BindTable>>; 4] {
-        let mut out: [Option<Handle<BindTable>>; 4] = [None; 4];
-        for (i, x) in self.bind_table.iter().take(4).enumerate() {
-            out[i] = Some(*x);
-        }
-
-        out
+        self.bind_table
     }
 }
 pub struct ComputePipelineBuilder {
@@ -821,7 +813,7 @@ impl ComputePipelineBuilder {
         }
 
         let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None; 4];
-        let mut bind_tables = Vec::new();
+        let mut bind_tables: [Option<Handle<BindTable>>; 4] = [None; 4];
         let mut table_bindings = HashMap::new();
         let mut defaults = DefaultResources::default();
 
@@ -906,7 +898,9 @@ impl ComputePipelineBuilder {
                         },
                     );
                 }
-                bind_tables.push(table);
+                if (set as usize) < bind_tables.len() {
+                    bind_tables[set as usize] = Some(table);
+                }
             }
         }
 
