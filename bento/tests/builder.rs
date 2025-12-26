@@ -71,6 +71,27 @@ void main() {
 }
 "#;
 
+const GRAPHICS_VERTEX_SET0: &str = r#"
+#version 450
+layout(set = 0, binding = 0) uniform Globals {
+    vec4 position;
+} globals;
+void main() {
+    gl_Position = globals.position;
+}
+"#;
+
+const GRAPHICS_FRAGMENT_SET2: &str = r#"
+#version 450
+layout(set = 2, binding = 0) readonly buffer Data {
+    float value;
+} data;
+layout(location = 0) out vec4 color;
+void main() {
+    color = vec4(data.value, 0.0, 0.0, 1.0);
+}
+"#;
+
 const COMPUTE_TABLE_SINGLE: &str = r#"
 #version 450
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
@@ -530,6 +551,65 @@ fn builds_graphics_pipeline_with_shared_uniform_bindings() {
         .build(&mut ctx);
 
     assert!(pipeline.is_some());
+}
+
+#[test]
+#[serial]
+fn graphics_pipeline_tracks_multiple_sets() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+
+    let vertex = compile_shader(dashi::ShaderType::Vertex, GRAPHICS_VERTEX_SET0);
+    let fragment = compile_shader(dashi::ShaderType::Fragment, GRAPHICS_FRAGMENT_SET2);
+
+    let globals_name = vertex
+        .variables
+        .iter()
+        .find(|var| var.kind.binding == 0 && var.set == 0)
+        .map(|var| var.name.clone())
+        .expect("globals variable name");
+    let data_name = fragment
+        .variables
+        .iter()
+        .find(|var| var.kind.binding == 0 && var.set == 2)
+        .map(|var| var.name.clone())
+        .expect("data variable name");
+
+    let globals = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "graphics_globals",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::UNIFORM,
+            initial_data: None,
+        })
+        .expect("globals buffer"),
+    );
+
+    let data = BufferView::new(
+        ctx.make_buffer(&BufferInfo {
+            debug_name: "graphics_data",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::STORAGE,
+            initial_data: None,
+        })
+        .expect("data buffer"),
+    );
+
+    let pipeline = GraphicsPipelineBuilder::new()
+        .vertex_compiled(Some(vertex))
+        .fragment_compiled(Some(fragment))
+        .add_variable(&globals_name, ShaderResource::Buffer(globals))
+        .add_variable(&data_name, ShaderResource::StorageBuffer(data))
+        .build(&mut ctx);
+
+    assert!(pipeline.is_some());
+
+    let pipeline = pipeline.expect("pipeline");
+    let tables = pipeline.tables();
+    assert!(tables[0].is_some());
+    assert!(tables[2].is_some());
+    assert!(tables[1].is_none());
 }
 
 #[test]
