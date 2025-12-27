@@ -28,6 +28,53 @@ fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::S
     }
 }
 
+fn resource_var_type(resource: &ShaderResource) -> BindGroupVariableType {
+    match resource {
+        ShaderResource::Buffer(_) | ShaderResource::ConstBuffer(_) => {
+            BindGroupVariableType::Uniform
+        }
+        ShaderResource::Dynamic(_) => BindGroupVariableType::DynamicUniform,
+        ShaderResource::DynamicStorage(_) => BindGroupVariableType::DynamicStorage,
+        ShaderResource::StorageBuffer(_) => BindGroupVariableType::Storage,
+        ShaderResource::SampledImage(_, _) => BindGroupVariableType::SampledImage,
+    }
+}
+
+fn config_dynamic_type(config: &BindTableVariable) -> Option<BindGroupVariableType> {
+    let dynamic_type_from_resource = |resource: &ShaderResource| match resource_var_type(resource) {
+        BindGroupVariableType::DynamicUniform => Some(BindGroupVariableType::DynamicUniform),
+        BindGroupVariableType::DynamicStorage => Some(BindGroupVariableType::DynamicStorage),
+        _ => None,
+    };
+
+    match config {
+        BindTableVariable::Binding { resource } => dynamic_type_from_resource(resource),
+        BindTableVariable::WithResources { resources } => resources
+            .iter()
+            .find_map(|resource| dynamic_type_from_resource(&resource.resource)),
+        BindTableVariable::Empty { .. } => None,
+    }
+}
+
+fn promoted_var_type(
+    var_type: BindGroupVariableType,
+    config: Option<&BindTableVariable>,
+) -> BindGroupVariableType {
+    let Some(dynamic_type) = config.and_then(config_dynamic_type) else {
+        return var_type;
+    };
+
+    match (var_type, dynamic_type) {
+        (BindGroupVariableType::Uniform, BindGroupVariableType::DynamicUniform) => {
+            BindGroupVariableType::DynamicUniform
+        }
+        (BindGroupVariableType::Storage, BindGroupVariableType::DynamicStorage) => {
+            BindGroupVariableType::DynamicStorage
+        }
+        _ => var_type,
+    }
+}
+
 fn merge_variable_type(
     existing: BindGroupVariableType,
     incoming: BindGroupVariableType,
@@ -501,6 +548,8 @@ impl GraphicsPipelineBuilder {
                         &var.name,
                         var.set,
                     )?;
+                    let var_type =
+                        promoted_var_type(var.kind.var_type, table_variables.get(&var.name));
 
                     match merged_vars.entry(var.kind.binding) {
                         Entry::Occupied(mut entry) => {
@@ -513,13 +562,13 @@ impl GraphicsPipelineBuilder {
                                     provided: count,
                                 });
                             }
-                            existing.var_type =
-                                merge_variable_type(existing.var_type, var.kind.var_type);
+                            existing.var_type = merge_variable_type(existing.var_type, var_type);
                             *stage_flags = merge_stage_flags(*stage_flags, shader_stage);
                         }
                         Entry::Vacant(entry) => {
                             let mut var_with_count = var.kind.clone();
                             var_with_count.count = count;
+                            var_with_count.var_type = var_type;
                             entry.insert((var_with_count, shader_stage));
                         }
                     }
@@ -933,6 +982,8 @@ impl ComputePipelineBuilder {
                 .filter(|var| var.set == set)
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
+                    var_with_count.var_type =
+                        promoted_var_type(var.kind.var_type, table_variables.get(&var.name));
                     var_with_count.count = resolve_binding_count(
                         &var.kind,
                         table_variables.get(&var.name),
