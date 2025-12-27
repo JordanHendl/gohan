@@ -28,6 +28,25 @@ fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::S
     }
 }
 
+fn merge_variable_type(
+    existing: BindGroupVariableType,
+    incoming: BindGroupVariableType,
+) -> BindGroupVariableType {
+    match (existing, incoming) {
+        (BindGroupVariableType::Uniform, BindGroupVariableType::DynamicUniform)
+        | (BindGroupVariableType::DynamicUniform, BindGroupVariableType::Uniform)
+        | (BindGroupVariableType::DynamicUniform, BindGroupVariableType::DynamicUniform) => {
+            BindGroupVariableType::DynamicUniform
+        }
+        (BindGroupVariableType::Storage, BindGroupVariableType::DynamicStorage)
+        | (BindGroupVariableType::DynamicStorage, BindGroupVariableType::Storage)
+        | (BindGroupVariableType::DynamicStorage, BindGroupVariableType::DynamicStorage) => {
+            BindGroupVariableType::DynamicStorage
+        }
+        _ => existing,
+    }
+}
+
 struct DefaultResources {
     uniform: Option<ShaderResource>,
     storage: Option<ShaderResource>,
@@ -494,6 +513,8 @@ impl GraphicsPipelineBuilder {
                                     provided: count,
                                 });
                             }
+                            existing.var_type =
+                                merge_variable_type(existing.var_type, var.kind.var_type);
                             *stage_flags = merge_stage_flags(*stage_flags, shader_stage);
                         }
                         Entry::Vacant(entry) => {
