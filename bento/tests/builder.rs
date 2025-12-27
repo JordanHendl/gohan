@@ -1,6 +1,6 @@
 use bento::{
-    CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang,
-    builder::{ComputePipelineBuilder, GraphicsPipelineBuilder, PipelineBuildError},
+    BentoError, CompilationResult, Compiler, OptimizationLevel, PipelineBuildError, Request,
+    ShaderLang, builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
 };
 use dashi::gpu::vulkan::{Context, ContextInfo, GPUError};
 use dashi::{
@@ -364,7 +364,7 @@ fn compute_pipeline_fails_when_data_is_missing() {
         .build(&mut ctx);
 
     match pipeline {
-        Err(PipelineBuildError::MissingBindings { bindings }) => {
+        Err(BentoError::PipelineBuild(PipelineBuildError::MissingBindings { bindings })) => {
             assert!(bindings.iter().any(|binding| binding.name == "data"));
         }
         other => panic!("expected missing bindings error, got {other:?}"),
@@ -593,7 +593,7 @@ fn graphics_pipeline_fails_when_data_is_missing() {
         .build(&mut ctx);
 
     match pipeline {
-        Err(PipelineBuildError::MissingBindings { bindings }) => {
+        Err(BentoError::PipelineBuild(PipelineBuildError::MissingBindings { bindings })) => {
             assert!(bindings.iter().any(|binding| binding.name == "globals"));
         }
         other => panic!("expected missing bindings error, got {other:?}"),
