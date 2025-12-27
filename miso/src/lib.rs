@@ -107,6 +107,9 @@ pub fn stddeferred(defines: &[String]) -> Vec<CompilationResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bento::builder::GraphicsPipelineBuilder;
+    use dashi::gpu::vulkan::{Context, ContextInfo};
+    use std::collections::{HashMap, HashSet};
 
     #[test]
     fn resolve_with_includes_inlines_imports() {
@@ -202,5 +205,70 @@ mod tests {
         assert_eq!(locations[4], (4, &dashi::ShaderPrimitiveType::Vec4));
 
         assert_eq!(offsets, vec![0, 12, 24, 40, 48]);
+    }
+
+    fn expected_binding_count(var: &dashi::BindGroupVariable) -> u32 {
+        if var.count == 0 { 256 } else { var.count }
+    }
+
+    #[test]
+    fn stddeferred_builds_graphics_pso_with_tables_per_set() {
+        let results = stddeferred(&[]);
+        let mut vertex = None;
+        let mut fragment = None;
+        for result in results {
+            match result.stage {
+                dashi::ShaderType::Vertex => vertex = Some(result),
+                dashi::ShaderType::Fragment => fragment = Some(result),
+                _ => {}
+            }
+        }
+
+        let vertex = vertex.expect("vertex stage missing");
+        let fragment = fragment.expect("fragment stage missing");
+
+        let mut table_sizes = HashMap::new();
+        let mut used_sets = HashSet::new();
+        for var in vertex.variables.iter().chain(fragment.variables.iter()) {
+            let expected_count = expected_binding_count(&var.kind);
+            if let Some(existing) = table_sizes.insert(var.name.clone(), expected_count) {
+                assert_eq!(
+                    existing, expected_count,
+                    "binding counts for {} differ between stages",
+                    var.name
+                );
+            }
+            used_sets.insert(var.set);
+        }
+
+        let mut ctx = Context::headless(&ContextInfo::default()).expect("headless context");
+        let mut builder = GraphicsPipelineBuilder::new()
+            .vertex_compiled(Some(vertex))
+            .fragment_compiled(Some(fragment));
+        for (name, size) in table_sizes {
+            builder = builder.add_table_variable(&name, size);
+        }
+
+        let pso = builder.build(&mut ctx);
+        assert!(pso.is_some());
+        let pso = pso.expect("pso");
+        let tables = pso.tables();
+        for set in 0..4u32 {
+            if used_sets.contains(&set) {
+                assert!(
+                    tables[set as usize].is_some(),
+                    "expected bind table for set {}",
+                    set
+                );
+            } else {
+                assert!(
+                    tables[set as usize].is_none(),
+                    "unexpected bind table for unused set {}",
+                    set
+                );
+            }
+        }
+
+        ctx.destroy();
     }
 }
