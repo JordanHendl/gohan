@@ -250,7 +250,7 @@ mod tests {
         }
 
         let pso = builder.build(&mut ctx);
-        assert!(pso.is_some());
+        assert!(pso.is_ok(), "pipeline build failed: {pso:?}");
         let pso = pso.expect("pso");
         let tables = pso.tables();
         for set in 0..4u32 {
