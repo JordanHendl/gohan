@@ -575,10 +575,8 @@ fn builds_graphics_pipeline_with_shared_uniform_bindings() {
     let pipeline = GraphicsPipelineBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
-        .add_variable("Globals", ShaderResource::Buffer(globals))
-        .build(&mut ctx);
-
-    assert!(pipeline.is_ok());
+        .add_variable("globals", ShaderResource::Buffer(globals))
+        .build(&mut ctx).expect("Failed to make pipeline");
 }
 
 #[test]
@@ -596,7 +594,7 @@ fn graphics_pipeline_fails_when_data_is_missing() {
 
     match pipeline {
         Err(PipelineBuildError::MissingBindings { bindings }) => {
-            assert!(bindings.iter().any(|binding| binding.name == "Globals"));
+            assert!(bindings.iter().any(|binding| binding.name == "globals"));
         }
         other => panic!("expected missing bindings error, got {other:?}"),
     }

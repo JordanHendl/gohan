@@ -256,7 +256,7 @@ fn resolve_binding_count(
     let config = config.ok_or_else(|| PipelineBuildError::MissingBindings {
         bindings: vec![MissingBinding {
             name: name.to_string(),
-            set: var.set,
+            set: 500,
             binding: var.binding,
         }],
     })?;
@@ -269,7 +269,7 @@ fn resolve_binding_count(
     Ok(if count == 0 { 256 } else { count })
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PSO {
     pub layout: Handle<GraphicsPipelineLayout>,
     pub handle: Handle<GraphicsPipeline>,
@@ -315,7 +315,7 @@ impl PSO {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct TableBinding {
     table: Handle<BindTable>,
     binding: u32,
@@ -562,7 +562,7 @@ impl GraphicsPipelineBuilder {
                     debug_name: "bento_bt_layout",
                     shaders: shader_infos.as_slice(),
                 })
-                .ok_or(PipelineBuildError::BindTableLayoutCreateFailed)?;
+                .map_err(|_| PipelineBuildError::BindTableLayoutCreateFailed)?;
 
             if (set as usize) < bt_layouts.len() {
                 bt_layouts[set as usize] = Some(layout);
@@ -615,7 +615,7 @@ impl GraphicsPipelineBuilder {
                         bindings: indexed_bindings.as_slice(),
                         set,
                     })
-                    .ok_or(PipelineBuildError::BindTableCreateFailed)?;
+                    .map_err(|_| PipelineBuildError::BindTableCreateFailed)?;
                 for (name, binding, size) in pending_names {
                     table_bindings.insert(
                         name,
@@ -687,7 +687,7 @@ impl GraphicsPipelineBuilder {
                 details,
                 bg_layouts: Default::default(),
             })
-            .ok_or(PipelineBuildError::PipelineLayoutCreateFailed)?;
+            .map_err(|_| PipelineBuildError::PipelineLayoutCreateFailed)?;
 
         let attachments: Vec<Format> = fragment
             .metadata
@@ -719,7 +719,7 @@ impl GraphicsPipelineBuilder {
                 subpass_id: 0,
                 debug_name: "bento_graphics_pipeline",
             })
-            .ok_or(PipelineBuildError::PipelineCreateFailed)?;
+            .map_err(|_| PipelineBuildError::PipelineCreateFailed)?;
 
         Ok(PSO {
             layout,
@@ -734,7 +734,7 @@ impl GraphicsPipelineBuilder {
 ////////////////////////////////////////////////////////////////////////////
 ///
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CSO {
     pub layout: Handle<ComputePipelineLayout>,
     pub handle: Handle<ComputePipeline>,
@@ -933,7 +933,7 @@ impl ComputePipelineBuilder {
                     debug_name: "bento_compute_bt_layout",
                     shaders: std::slice::from_ref(&shader_info),
                 })
-                .ok_or(PipelineBuildError::BindTableLayoutCreateFailed)?;
+                .map_err(|_| PipelineBuildError::BindTableLayoutCreateFailed)?;
 
             if (set as usize) < bt_layouts.len() {
                 bt_layouts[set as usize] = Some(layout);
@@ -981,7 +981,7 @@ impl ComputePipelineBuilder {
                         bindings: indexed_bindings.as_slice(),
                         set,
                     })
-                    .ok_or(PipelineBuildError::BindTableCreateFailed)?;
+                    .map_err(|_| PipelineBuildError::BindTableCreateFailed)?;
                 for (name, binding, size) in pending_names {
                     table_bindings.insert(
                         name,
@@ -1010,14 +1010,14 @@ impl ComputePipelineBuilder {
                 bg_layouts: Default::default(),
                 shader: &shader_info,
             })
-            .ok_or(PipelineBuildError::PipelineLayoutCreateFailed)?;
+            .map_err(|_| PipelineBuildError::PipelineLayoutCreateFailed)?;
 
         let pipeline = ctx
             .make_compute_pipeline(&ComputePipelineInfo {
                 debug_name: "bento_compute_pipeline",
                 layout,
             })
-            .ok_or(PipelineBuildError::PipelineCreateFailed)?;
+            .map_err(|_| PipelineBuildError::PipelineCreateFailed)?;
 
         Ok(CSO {
             layout,
