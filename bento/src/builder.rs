@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, hash_map::Entry},
     ptr::NonNull,
 };
 
@@ -15,6 +15,43 @@ use dashi::{
 };
 
 use crate::{CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingBinding {
+    pub name: String,
+    pub set: u32,
+    pub binding: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PipelineBuildError {
+    MissingShader {
+        stage: &'static str,
+    },
+    MissingBindings {
+        bindings: Vec<MissingBinding>,
+    },
+    MismatchedBindingCounts {
+        set: u32,
+        binding: u32,
+    },
+    InvalidResourceCount {
+        name: String,
+        expected: u32,
+        provided: u32,
+    },
+    InvalidResourceSlots {
+        name: String,
+        expected: u32,
+    },
+    MissingDefaultResource {
+        name: String,
+    },
+    BindTableLayoutCreateFailed,
+    BindTableCreateFailed,
+    PipelineLayoutCreateFailed,
+    PipelineCreateFailed,
+}
 
 fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::ShaderType {
     if lhs == rhs {
@@ -137,9 +174,14 @@ fn default_resources_for_variable(
     defaults: &mut DefaultResources,
     ctx: &mut dashi::Context,
     var: &dashi::BindGroupVariable,
+    name: &str,
     size: u32,
-) -> Option<Vec<IndexedResource>> {
-    let default_resource = defaults.get(ctx, var.var_type)?;
+) -> Result<Vec<IndexedResource>, PipelineBuildError> {
+    let default_resource = defaults.get(ctx, var.var_type).ok_or_else(|| {
+        PipelineBuildError::MissingDefaultResource {
+            name: name.to_string(),
+        }
+    })?;
 
     let mut defaults = Vec::with_capacity(size as usize);
     for slot in 0..size {
@@ -149,28 +191,38 @@ fn default_resources_for_variable(
         });
     }
 
-    Some(defaults)
+    Ok(defaults)
 }
 
 fn resources_from_config(
     defaults: &mut DefaultResources,
     ctx: &mut dashi::Context,
     var: &dashi::BindGroupVariable,
+    name: &str,
     config: &BindTableVariable,
     expected_count: u32,
-) -> Option<(Vec<IndexedResource>, u32)> {
+) -> Result<(Vec<IndexedResource>, u32), PipelineBuildError> {
     match config {
         BindTableVariable::Empty { size } => {
             if *size != expected_count {
-                return None;
+                return Err(PipelineBuildError::InvalidResourceCount {
+                    name: name.to_string(),
+                    expected: expected_count,
+                    provided: *size,
+                });
             }
 
-            let defaults = default_resources_for_variable(defaults, ctx, var, expected_count)?;
-            Some((defaults, expected_count))
+            let defaults =
+                default_resources_for_variable(defaults, ctx, var, name, expected_count)?;
+            Ok((defaults, expected_count))
         }
         BindTableVariable::WithResources { resources } => {
             if resources.len() != expected_count as usize {
-                return None;
+                return Err(PipelineBuildError::InvalidResourceCount {
+                    name: name.to_string(),
+                    expected: expected_count,
+                    provided: resources.len() as u32,
+                });
             }
 
             let mut used_slots = HashSet::new();
@@ -178,12 +230,15 @@ fn resources_from_config(
                 .iter()
                 .any(|res| res.slot >= expected_count || !used_slots.insert(res.slot))
             {
-                return None;
+                return Err(PipelineBuildError::InvalidResourceSlots {
+                    name: name.to_string(),
+                    expected: expected_count,
+                });
             }
 
-            Some((resources.clone(), expected_count))
+            Ok((resources.clone(), expected_count))
         }
-        BindTableVariable::Binding { resource } => Some((
+        BindTableVariable::Binding { resource } => Ok((
             vec![IndexedResource {
                 resource: resource.clone(),
                 slot: 0,
@@ -196,18 +251,25 @@ fn resources_from_config(
 fn resolve_binding_count(
     var: &dashi::BindGroupVariable,
     config: Option<&BindTableVariable>,
-) -> u32 {
+    name: &str,
+) -> Result<u32, PipelineBuildError> {
+    let config = config.ok_or_else(|| PipelineBuildError::MissingBindings {
+        bindings: vec![MissingBinding {
+            name: name.to_string(),
+            set: 500,
+            binding: var.binding,
+        }],
+    })?;
     let count = match config {
-        Some(BindTableVariable::Binding { resource: _ }) => 1,
-        Some(BindTableVariable::Empty { size }) => *size,
-        Some(BindTableVariable::WithResources { resources }) => resources.len() as u32,
-        None => var.count,
+        BindTableVariable::Binding { resource: _ } => 1,
+        BindTableVariable::Empty { size } => *size,
+        BindTableVariable::WithResources { resources } => resources.len() as u32,
     };
 
-    if count == 0 { 256 } else { count }
+    Ok(if count == 0 { 256 } else { count })
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PSO {
     pub layout: Handle<GraphicsPipelineLayout>,
     pub handle: Handle<GraphicsPipeline>,
@@ -253,7 +315,7 @@ impl PSO {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 struct TableBinding {
     table: Handle<BindTable>,
     binding: u32,
@@ -378,7 +440,7 @@ impl GraphicsPipelineBuilder {
         Self { details, ..self }
     }
 
-    pub fn build(self, ctx: &mut dashi::Context) -> Option<PSO> {
+    pub fn build(self, ctx: &mut dashi::Context) -> Result<PSO, PipelineBuildError> {
         let GraphicsPipelineBuilder {
             vertex,
             fragment,
@@ -386,8 +448,26 @@ impl GraphicsPipelineBuilder {
             details,
         } = self;
 
-        let vertex = vertex?;
-        let fragment = fragment?;
+        let vertex = vertex.ok_or(PipelineBuildError::MissingShader { stage: "vertex" })?;
+        let fragment = fragment.ok_or(PipelineBuildError::MissingShader { stage: "fragment" })?;
+
+        let mut missing_bindings = Vec::new();
+        let mut seen = HashSet::new();
+        for var in vertex.variables.iter().chain(fragment.variables.iter()) {
+            if !table_variables.contains_key(&var.name) && seen.insert(var.name.clone()) {
+                missing_bindings.push(MissingBinding {
+                    name: var.name.clone(),
+                    set: var.set,
+                    binding: var.kind.binding,
+                });
+            }
+        }
+
+        if !missing_bindings.is_empty() {
+            return Err(PipelineBuildError::MissingBindings {
+                bindings: missing_bindings,
+            });
+        }
 
         // Build bind table layouts and tables.
         let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None; 4];
@@ -398,35 +478,41 @@ impl GraphicsPipelineBuilder {
         for set in 0..4u32 {
             let mut merged_vars: HashMap<u32, (dashi::BindGroupVariable, dashi::ShaderType)> =
                 HashMap::new();
-            let mut invalid_counts = false;
 
-            let mut collect_vars = |stage: &CompilationResult, shader_stage: dashi::ShaderType| {
+            let mut collect_vars = |stage: &CompilationResult,
+                                    shader_stage: dashi::ShaderType|
+             -> Result<(), PipelineBuildError> {
                 for var in stage.variables.iter().filter(|var| var.set == set) {
-                    let count = resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                    let count = resolve_binding_count(
+                        &var.kind,
+                        table_variables.get(&var.name),
+                        &var.name,
+                    )?;
 
-                    merged_vars
-                        .entry(var.kind.binding)
-                        .and_modify(|(existing, stage_flags)| {
+                    match merged_vars.entry(var.kind.binding) {
+                        Entry::Occupied(mut entry) => {
+                            let (existing, stage_flags) = entry.get_mut();
                             if existing.count != count {
-                                invalid_counts = true;
-                            } else {
-                                *stage_flags = merge_stage_flags(*stage_flags, shader_stage);
+                                return Err(PipelineBuildError::MismatchedBindingCounts {
+                                    set,
+                                    binding: var.kind.binding,
+                                });
                             }
-                        })
-                        .or_insert_with(|| {
+                            *stage_flags = merge_stage_flags(*stage_flags, shader_stage);
+                        }
+                        Entry::Vacant(entry) => {
                             let mut var_with_count = var.kind.clone();
                             var_with_count.count = count;
-                            (var_with_count, shader_stage)
-                        });
+                            entry.insert((var_with_count, shader_stage));
+                        }
+                    }
                 }
+
+                Ok(())
             };
 
-            collect_vars(&vertex, vertex.stage);
-            collect_vars(&fragment, fragment.stage);
-
-            if invalid_counts {
-                return None;
-            }
+            collect_vars(&vertex, vertex.stage)?;
+            collect_vars(&fragment, fragment.stage)?;
 
             if merged_vars.is_empty() {
                 continue;
@@ -476,7 +562,7 @@ impl GraphicsPipelineBuilder {
                     debug_name: "bento_bt_layout",
                     shaders: shader_infos.as_slice(),
                 })
-                .ok()?;
+                .map_err(|_| PipelineBuildError::BindTableLayoutCreateFailed)?;
 
             if (set as usize) < bt_layouts.len() {
                 bt_layouts[set as usize] = Some(layout);
@@ -493,12 +579,14 @@ impl GraphicsPipelineBuilder {
                 }
 
                 if let Some(resource) = table_variables.get(&var.name) {
-                    let expected_count = resolve_binding_count(&var.kind, Some(resource));
+                    let expected_count =
+                        resolve_binding_count(&var.kind, Some(resource), &var.name)?;
                     if bound_indices.insert(var.kind.binding) {
                         let (initial_resources, size) = resources_from_config(
                             &mut defaults,
                             ctx,
                             &var.kind,
+                            &var.name,
                             resource,
                             expected_count,
                         )?;
@@ -527,7 +615,7 @@ impl GraphicsPipelineBuilder {
                         bindings: indexed_bindings.as_slice(),
                         set,
                     })
-                    .ok()?;
+                    .map_err(|_| PipelineBuildError::BindTableCreateFailed)?;
                 for (name, binding, size) in pending_names {
                     table_bindings.insert(
                         name,
@@ -599,7 +687,7 @@ impl GraphicsPipelineBuilder {
                 details,
                 bg_layouts: Default::default(),
             })
-            .ok()?;
+            .map_err(|_| PipelineBuildError::PipelineLayoutCreateFailed)?;
 
         let attachments: Vec<Format> = fragment
             .metadata
@@ -617,9 +705,7 @@ impl GraphicsPipelineBuilder {
             })
             .collect();
 
-        let samples = attachments.iter().map(|_| {
-            SampleCount::S1
-        }).collect();
+        let samples = attachments.iter().map(|_| SampleCount::S1).collect();
 
         let pipeline = ctx
             .make_graphics_pipeline(&GraphicsPipelineInfo {
@@ -633,9 +719,9 @@ impl GraphicsPipelineBuilder {
                 subpass_id: 0,
                 debug_name: "bento_graphics_pipeline",
             })
-            .unwrap();
+            .map_err(|_| PipelineBuildError::PipelineCreateFailed)?;
 
-        Some(PSO {
+        Ok(PSO {
             layout,
             handle: pipeline,
             bind_table: bind_tables,
@@ -648,7 +734,7 @@ impl GraphicsPipelineBuilder {
 ////////////////////////////////////////////////////////////////////////////
 ///
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct CSO {
     pub layout: Handle<ComputePipelineLayout>,
     pub handle: Handle<ComputePipeline>,
@@ -785,31 +871,30 @@ impl ComputePipelineBuilder {
     }
 
     // Will fail if shaders are not given, or if variables given do not
-    pub fn build(self, ctx: &mut dashi::Context) -> Option<CSO> {
+    pub fn build(self, ctx: &mut dashi::Context) -> Result<CSO, PipelineBuildError> {
         let ComputePipelineBuilder {
             shader,
             table_variables,
         } = self;
 
-        let shader = shader?;
+        let shader = shader.ok_or(PipelineBuildError::MissingShader { stage: "compute" })?;
 
-        for set in 0..4u32 {
-            let vars: Vec<dashi::BindGroupVariable> = shader
-                .variables
-                .iter()
-                .filter(|var| var.set == set)
-                .map(|var| {
-                    let mut var_with_count = var.kind.clone();
-                    var_with_count.count =
-                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
-
-                    var_with_count
-                })
-                .collect();
-
-            if vars.is_empty() {
-                continue;
+        let mut missing_bindings = Vec::new();
+        let mut seen = HashSet::new();
+        for var in shader.variables.iter() {
+            if !table_variables.contains_key(&var.name) && seen.insert(var.name.clone()) {
+                missing_bindings.push(MissingBinding {
+                    name: var.name.clone(),
+                    set: var.set,
+                    binding: var.kind.binding,
+                });
             }
+        }
+
+        if !missing_bindings.is_empty() {
+            return Err(PipelineBuildError::MissingBindings {
+                bindings: missing_bindings,
+            });
         }
 
         let mut bt_layouts: [Option<Handle<BindTableLayout>>; 4] = [None; 4];
@@ -824,12 +909,15 @@ impl ComputePipelineBuilder {
                 .filter(|var| var.set == set)
                 .map(|var| {
                     let mut var_with_count = var.kind.clone();
-                    var_with_count.count =
-                        resolve_binding_count(&var.kind, table_variables.get(&var.name));
+                    var_with_count.count = resolve_binding_count(
+                        &var.kind,
+                        table_variables.get(&var.name),
+                        &var.name,
+                    )?;
 
-                    var_with_count
+                    Ok(var_with_count)
                 })
-                .collect();
+                .collect::<Result<_, PipelineBuildError>>()?;
 
             if vars.is_empty() {
                 continue;
@@ -845,7 +933,7 @@ impl ComputePipelineBuilder {
                     debug_name: "bento_compute_bt_layout",
                     shaders: std::slice::from_ref(&shader_info),
                 })
-                .ok()?;
+                .map_err(|_| PipelineBuildError::BindTableLayoutCreateFailed)?;
 
             if (set as usize) < bt_layouts.len() {
                 bt_layouts[set as usize] = Some(layout);
@@ -860,9 +948,15 @@ impl ComputePipelineBuilder {
                 }
 
                 if let Some(res) = table_variables.get(&var.name) {
-                    let expected_count = resolve_binding_count(&var.kind, Some(res));
-                    let (initial_resources, size) =
-                        resources_from_config(&mut defaults, ctx, &var.kind, res, expected_count)?;
+                    let expected_count = resolve_binding_count(&var.kind, Some(res), &var.name)?;
+                    let (initial_resources, size) = resources_from_config(
+                        &mut defaults,
+                        ctx,
+                        &var.kind,
+                        &var.name,
+                        res,
+                        expected_count,
+                    )?;
                     resources.push(initial_resources);
                     let resource_index = resources.len() - 1;
 
@@ -887,7 +981,7 @@ impl ComputePipelineBuilder {
                         bindings: indexed_bindings.as_slice(),
                         set,
                     })
-                    .ok()?;
+                    .map_err(|_| PipelineBuildError::BindTableCreateFailed)?;
                 for (name, binding, size) in pending_names {
                     table_bindings.insert(
                         name,
@@ -916,16 +1010,16 @@ impl ComputePipelineBuilder {
                 bg_layouts: Default::default(),
                 shader: &shader_info,
             })
-            .ok()?;
+            .map_err(|_| PipelineBuildError::PipelineLayoutCreateFailed)?;
 
         let pipeline = ctx
             .make_compute_pipeline(&ComputePipelineInfo {
                 debug_name: "bento_compute_pipeline",
                 layout,
             })
-            .ok()?;
+            .map_err(|_| PipelineBuildError::PipelineCreateFailed)?;
 
-        Some(CSO {
+        Ok(CSO {
             layout,
             handle: pipeline,
             bind_table: bind_tables,
