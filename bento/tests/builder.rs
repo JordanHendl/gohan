@@ -1,10 +1,6 @@
-use std::collections::HashMap;
-use std::ffi::{CStr, c_void};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use bento::{
     CompilationResult, Compiler, OptimizationLevel, Request, ShaderLang,
-    builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
+    builder::{ComputePipelineBuilder, GraphicsPipelineBuilder, PipelineBuildError},
 };
 use dashi::gpu::vulkan::{Context, ContextInfo, GPUError};
 use dashi::{
@@ -12,6 +8,10 @@ use dashi::{
     DebugMessengerCreateInfo, IndexedResource, MemoryVisibility, ShaderResource,
 };
 use serial_test::serial;
+use std::collections::HashMap;
+use std::ffi::{CStr, c_void};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 const SIMPLE_COMPUTE: &str = r#"
 #version 450
@@ -279,7 +279,7 @@ fn builds_simple_compute_pipeline_without_validation_errors() {
         .shader_compiled(Some(compute_stage))
         .build(&mut ctx);
 
-    assert!(pipeline.is_some());
+    assert!(pipeline.is_ok());
 }
 
 #[test]
@@ -340,6 +340,35 @@ fn builds_compute_pipeline_with_resources_and_table_updates() {
             slot: 0,
         }],
     );
+}
+
+#[test]
+#[serial]
+fn compute_pipeline_fails_when_data_is_missing() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+    let compute_stage = compile_shader(dashi::ShaderType::Compute, BUFFERED_COMPUTE);
+
+    let uniform = ctx
+        .make_buffer(&BufferInfo {
+            debug_name: "config_missing_data",
+            byte_size: 16,
+            visibility: MemoryVisibility::CpuAndGpu,
+            usage: BufferUsage::UNIFORM,
+            initial_data: None,
+        })
+        .expect("uniform buffer");
+
+    let pipeline = ComputePipelineBuilder::new()
+        .shader_compiled(Some(compute_stage))
+        .add_variable("config", ShaderResource::Buffer(uniform.into()))
+        .build(&mut ctx);
+
+    match pipeline {
+        Err(PipelineBuildError::MissingBindings { bindings }) => {
+            assert!(bindings.iter().any(|binding| binding.name == "data"));
+        }
+        other => panic!("expected missing bindings error, got {other:?}"),
+    }
 }
 
 #[test]
@@ -469,7 +498,7 @@ fn compute_table_count_can_be_overridden_with_resources_length() {
         )
         .build(&mut ctx);
 
-    assert!(pipeline.is_some());
+    assert!(pipeline.is_ok());
 }
 
 #[test]
@@ -505,8 +534,7 @@ fn compute_table_rejects_out_of_range_slots() {
             }],
         )
         .build(&mut ctx);
-    // Test currently does not pass.
-    //    assert!(pipeline.is_none());
+    assert!(pipeline.is_err());
 }
 
 #[test]
@@ -522,7 +550,7 @@ fn builds_graphics_pipeline_without_resources() {
         .fragment_compiled(Some(fragment))
         .build(&mut ctx);
 
-    assert!(pipeline.is_some());
+    assert!(pipeline.is_ok());
 }
 
 #[test]
@@ -550,7 +578,28 @@ fn builds_graphics_pipeline_with_shared_uniform_bindings() {
         .add_variable("Globals", ShaderResource::Buffer(globals))
         .build(&mut ctx);
 
-    assert!(pipeline.is_some());
+    assert!(pipeline.is_ok());
+}
+
+#[test]
+#[serial]
+fn graphics_pipeline_fails_when_data_is_missing() {
+    let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
+
+    let vertex = compile_shader(dashi::ShaderType::Vertex, GRAPHICS_VERTEX_UNIFORM);
+    let fragment = compile_shader(dashi::ShaderType::Fragment, GRAPHICS_FRAGMENT_UNIFORM);
+
+    let pipeline = GraphicsPipelineBuilder::new()
+        .vertex_compiled(Some(vertex))
+        .fragment_compiled(Some(fragment))
+        .build(&mut ctx);
+
+    match pipeline {
+        Err(PipelineBuildError::MissingBindings { bindings }) => {
+            assert!(bindings.iter().any(|binding| binding.name == "Globals"));
+        }
+        other => panic!("expected missing bindings error, got {other:?}"),
+    }
 }
 
 #[test]
@@ -603,7 +652,7 @@ fn graphics_pipeline_tracks_multiple_sets() {
         .add_variable(&data_name, ShaderResource::StorageBuffer(data))
         .build(&mut ctx);
 
-    assert!(pipeline.is_some());
+    assert!(pipeline.is_ok());
 
     let pipeline = pipeline.expect("pipeline");
     let tables = pipeline.tables();
@@ -660,26 +709,26 @@ fn graphics_table_count_can_be_overridden() {
     let pipeline = GraphicsPipelineBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
-        //        .add_table_variable_with_resources(
-        //            &data_name,
-        //            vec![
-        //                IndexedResource {
-        //                    resource: ShaderResource::StorageBuffer(first),
-        //                    slot: 0,
-        //                },
-        //                IndexedResource {
-        //                    resource: ShaderResource::StorageBuffer(second),
-        //                    slot: 1,
-        //                },
-        //                IndexedResource {
-        //                    resource: ShaderResource::StorageBuffer(third),
-        //                    slot: 2,
-        //                },
-        //            ],
-        //        )
+        .add_table_variable_with_resources(
+            &data_name,
+            vec![
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(first),
+                    slot: 0,
+                },
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(second),
+                    slot: 1,
+                },
+                IndexedResource {
+                    resource: ShaderResource::StorageBuffer(third),
+                    slot: 2,
+                },
+            ],
+        )
         .build(&mut ctx);
 
-    assert!(pipeline.is_some());
+    assert!(pipeline.is_ok());
 }
 
 #[test]
@@ -745,7 +794,7 @@ fn test_cull_shader_binding_mix() {
         .add_variable("params", ShaderResource::ConstBuffer(uniform.into()))
         .build(&mut ctx);
 
-    assert!(cso.is_some());
+    assert!(cso.is_ok());
 
     let cso = cso.unwrap();
 
@@ -789,6 +838,5 @@ fn graphics_table_rejects_out_of_range_slots() {
             }],
         )
         .build(&mut ctx);
-    // currently fails assertion, this should fail in actual test.
-    //    assert!(pipeline.is_none());
+    assert!(pipeline.is_err());
 }
