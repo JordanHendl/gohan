@@ -4,14 +4,7 @@ use std::{
 };
 
 use dashi::{
-    BindGroup, BindGroupInfo, BindGroupLayout, BindGroupLayoutInfo, BindGroupVariableType,
-    BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BufferInfo, BufferUsage,
-    BufferView, ComputePipeline, ComputePipelineInfo, ComputePipelineLayout,
-    ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline, GraphicsPipelineDetails,
-    GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo,
-    ImageView, IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo,
-    SampleCount, SamplerInfo, ShaderInfo, ShaderPrimitiveType, ShaderResource, ShaderType,
-    VertexDescriptionInfo, VertexEntryInfo,
+    BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BindTableVariableType, BufferInfo, BufferUsage, BufferView, ComputePipeline, ComputePipelineInfo, ComputePipelineLayout, ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo, SampleCount, SamplerInfo, ShaderInfo, ShaderPrimitiveType, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo
 };
 
 pub use crate::PipelineBuildError;
@@ -28,22 +21,22 @@ fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::S
     }
 }
 
-fn resource_var_type(resource: &ShaderResource) -> BindGroupVariableType {
+fn resource_var_type(resource: &ShaderResource) -> BindTableVariableType {
     match resource {
         ShaderResource::Buffer(_) | ShaderResource::ConstBuffer(_) => {
-            BindGroupVariableType::Uniform
+            BindTableVariableType::Uniform
         }
-        ShaderResource::Dynamic(_) => BindGroupVariableType::DynamicUniform,
-        ShaderResource::DynamicStorage(_) => BindGroupVariableType::DynamicStorage,
-        ShaderResource::StorageBuffer(_) => BindGroupVariableType::Storage,
-        ShaderResource::SampledImage(_, _) => BindGroupVariableType::SampledImage,
+        ShaderResource::Dynamic(_) => BindTableVariableType::DynamicUniform,
+        ShaderResource::DynamicStorage(_) => BindTableVariableType::DynamicStorage,
+        ShaderResource::StorageBuffer(_) => BindTableVariableType::Storage,
+        ShaderResource::SampledImage(_, _) => BindTableVariableType::SampledImage,
     }
 }
 
-fn config_dynamic_type(config: &BindTableVariable) -> Option<BindGroupVariableType> {
+fn config_dynamic_type(config: &BindTableVariable) -> Option<BindTableVariableType> {
     let dynamic_type_from_resource = |resource: &ShaderResource| match resource_var_type(resource) {
-        BindGroupVariableType::DynamicUniform => Some(BindGroupVariableType::DynamicUniform),
-        BindGroupVariableType::DynamicStorage => Some(BindGroupVariableType::DynamicStorage),
+        BindTableVariableType::DynamicUniform => Some(BindTableVariableType::DynamicUniform),
+        BindTableVariableType::DynamicStorage => Some(BindTableVariableType::DynamicStorage),
         _ => None,
     };
 
@@ -57,38 +50,38 @@ fn config_dynamic_type(config: &BindTableVariable) -> Option<BindGroupVariableTy
 }
 
 fn promoted_var_type(
-    var_type: BindGroupVariableType,
+    var_type: BindTableVariableType,
     config: Option<&BindTableVariable>,
-) -> BindGroupVariableType {
+) -> BindTableVariableType {
     let Some(dynamic_type) = config.and_then(config_dynamic_type) else {
         return var_type;
     };
 
     match (var_type, dynamic_type) {
-        (BindGroupVariableType::Uniform, BindGroupVariableType::DynamicUniform) => {
-            BindGroupVariableType::DynamicUniform
+        (BindTableVariableType::Uniform, BindTableVariableType::DynamicUniform) => {
+            BindTableVariableType::DynamicUniform
         }
-        (BindGroupVariableType::Storage, BindGroupVariableType::DynamicStorage) => {
-            BindGroupVariableType::DynamicStorage
+        (BindTableVariableType::Storage, BindTableVariableType::DynamicStorage) => {
+            BindTableVariableType::DynamicStorage
         }
         _ => var_type,
     }
 }
 
 fn merge_variable_type(
-    existing: BindGroupVariableType,
-    incoming: BindGroupVariableType,
-) -> BindGroupVariableType {
+    existing: BindTableVariableType,
+    incoming: BindTableVariableType,
+) -> BindTableVariableType {
     match (existing, incoming) {
-        (BindGroupVariableType::Uniform, BindGroupVariableType::DynamicUniform)
-        | (BindGroupVariableType::DynamicUniform, BindGroupVariableType::Uniform)
-        | (BindGroupVariableType::DynamicUniform, BindGroupVariableType::DynamicUniform) => {
-            BindGroupVariableType::DynamicUniform
+        (BindTableVariableType::Uniform, BindTableVariableType::DynamicUniform)
+        | (BindTableVariableType::DynamicUniform, BindTableVariableType::Uniform)
+        | (BindTableVariableType::DynamicUniform, BindTableVariableType::DynamicUniform) => {
+            BindTableVariableType::DynamicUniform
         }
-        (BindGroupVariableType::Storage, BindGroupVariableType::DynamicStorage)
-        | (BindGroupVariableType::DynamicStorage, BindGroupVariableType::Storage)
-        | (BindGroupVariableType::DynamicStorage, BindGroupVariableType::DynamicStorage) => {
-            BindGroupVariableType::DynamicStorage
+        (BindTableVariableType::Storage, BindTableVariableType::DynamicStorage)
+        | (BindTableVariableType::DynamicStorage, BindTableVariableType::Storage)
+        | (BindTableVariableType::DynamicStorage, BindTableVariableType::DynamicStorage) => {
+            BindTableVariableType::DynamicStorage
         }
         _ => existing,
     }
@@ -195,32 +188,32 @@ impl DefaultResources {
     fn get(
         &mut self,
         ctx: &mut dashi::Context,
-        var_type: BindGroupVariableType,
+        var_type: BindTableVariableType,
         name: &str,
     ) -> Result<ShaderResource, PipelineBuildError> {
         match var_type {
-            BindGroupVariableType::Uniform | BindGroupVariableType::DynamicUniform => {
+            BindTableVariableType::Uniform | BindTableVariableType::DynamicUniform => {
                 if self.uniform.is_none() {
                     self.uniform = Some(Self::make_uniform(ctx, name)?);
                 }
 
                 Ok(self.uniform.clone().expect("uniform default"))
             }
-            BindGroupVariableType::Storage | BindGroupVariableType::DynamicStorage => {
+            BindTableVariableType::Storage | BindTableVariableType::DynamicStorage => {
                 if self.storage.is_none() {
                     self.storage = Some(Self::make_storage(ctx, name)?);
                 }
 
                 Ok(self.storage.clone().expect("storage default"))
             }
-            BindGroupVariableType::SampledImage => {
+            BindTableVariableType::SampledImage => {
                 if self.sampled_image.is_none() {
                     self.sampled_image = Some(Self::make_sampled_image(ctx, name)?);
                 }
 
                 Ok(self.sampled_image.clone().expect("sampled image default"))
             }
-            BindGroupVariableType::StorageImage => {
+            BindTableVariableType::StorageImage => {
                 if self.storage_image.is_none() {
                     self.storage_image = Some(Self::make_sampled_image(ctx, name)?);
                 }
@@ -234,7 +227,7 @@ impl DefaultResources {
 fn default_resources_for_variable(
     defaults: &mut DefaultResources,
     ctx: &mut dashi::Context,
-    var: &dashi::BindGroupVariable,
+    var: &dashi::BindTableVariable,
     name: &str,
     size: u32,
 ) -> Result<Vec<IndexedResource>, PipelineBuildError> {
@@ -254,7 +247,7 @@ fn default_resources_for_variable(
 fn resources_from_config(
     defaults: &mut DefaultResources,
     ctx: &mut dashi::Context,
-    var: &dashi::BindGroupVariable,
+    var: &dashi::BindTableVariable,
     name: &str,
     config: &BindTableVariable,
     expected_count: u32,
@@ -306,7 +299,7 @@ fn resources_from_config(
 }
 
 fn resolve_binding_count(
-    var: &dashi::BindGroupVariable,
+    var: &dashi::BindTableVariable,
     config: Option<&BindTableVariable>,
     name: &str,
     set: u32,
@@ -535,7 +528,7 @@ impl GraphicsPipelineBuilder {
         let mut defaults = DefaultResources::default();
 
         for set in 0..4u32 {
-            let mut merged_vars: HashMap<u32, (dashi::BindGroupVariable, dashi::ShaderType)> =
+            let mut merged_vars: HashMap<u32, (dashi::BindTableVariable, dashi::ShaderType)> =
                 HashMap::new();
 
             let mut collect_vars = |stage: &CompilationResult,
@@ -584,7 +577,7 @@ impl GraphicsPipelineBuilder {
                 continue;
             }
 
-            let mut merged_vars: Vec<(u32, (dashi::BindGroupVariable, dashi::ShaderType))> =
+            let mut merged_vars: Vec<(u32, (dashi::BindTableVariable, dashi::ShaderType))> =
                 merged_vars.into_iter().collect();
             merged_vars.sort_by_key(|(_, (var, _))| var.binding);
 
@@ -751,7 +744,6 @@ impl GraphicsPipelineBuilder {
                 bt_layouts,
                 shaders: shader_infos.as_slice(),
                 details,
-                bg_layouts: Default::default(),
             })
             .map_err(|source| PipelineBuildError::PipelineLayoutCreateFailed {
                 pipeline: "graphics",
@@ -976,7 +968,7 @@ impl ComputePipelineBuilder {
         let mut defaults = DefaultResources::default();
 
         for set in 0..4u32 {
-            let vars: Vec<dashi::BindGroupVariable> = shader
+            let vars: Vec<dashi::BindTableVariable> = shader
                 .variables
                 .iter()
                 .filter(|var| var.set == set)
@@ -1084,7 +1076,6 @@ impl ComputePipelineBuilder {
         let layout = ctx
             .make_compute_pipeline_layout(&ComputePipelineLayoutInfo {
                 bt_layouts,
-                bg_layouts: Default::default(),
                 shader: &shader_info,
             })
             .map_err(|source| PipelineBuildError::PipelineLayoutCreateFailed {

@@ -154,24 +154,24 @@ mod tests {
             .find(|r| r.stage == dashi::ShaderType::Fragment)
             .expect("fragment stage missing");
 
-        let vertex_sets: Vec<(u32, dashi::BindGroupVariableType)> = vertex
+        let vertex_sets: Vec<(u32, dashi::BindTableVariableType)> = vertex
             .variables
             .iter()
             .map(|v| (v.set, v.kind.var_type))
             .collect();
         assert_eq!(vertex_sets.len(), 3);
-        assert!(vertex_sets.contains(&(0, dashi::BindGroupVariableType::Storage)));
-        assert!(vertex_sets.contains(&(1, dashi::BindGroupVariableType::Storage)));
+        assert!(vertex_sets.contains(&(0, dashi::BindTableVariableType::Storage)));
+        assert!(vertex_sets.contains(&(1, dashi::BindTableVariableType::Storage)));
 
-        let fragment_sets: Vec<(u32, dashi::BindGroupVariableType)> = fragment
+        let fragment_sets: Vec<(u32, dashi::BindTableVariableType)> = fragment
             .variables
             .iter()
             .map(|v| (v.set, v.kind.var_type))
             .collect();
         assert_eq!(fragment_sets.len(), 3);
-        assert!(fragment_sets.contains(&(0, dashi::BindGroupVariableType::SampledImage)));
-        assert!(fragment_sets.contains(&(0, dashi::BindGroupVariableType::Storage)));
-        assert!(fragment_sets.contains(&(1, dashi::BindGroupVariableType::Storage)));
+        assert!(fragment_sets.contains(&(0, dashi::BindTableVariableType::SampledImage)));
+        assert!(fragment_sets.contains(&(0, dashi::BindTableVariableType::Storage)));
+        assert!(fragment_sets.contains(&(1, dashi::BindTableVariableType::Storage)));
     }
 
     #[test]
@@ -207,7 +207,7 @@ mod tests {
         assert_eq!(offsets, vec![0, 12, 24, 40, 48]);
     }
 
-    fn expected_binding_count(var: &dashi::BindGroupVariable) -> u32 {
+    fn expected_binding_count(var: &dashi::BindTableVariable) -> u32 {
         if var.count == 0 { 256 } else { var.count }
     }
 

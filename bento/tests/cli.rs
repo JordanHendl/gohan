@@ -178,8 +178,8 @@ fn inspects_saved_artifact() {
         variables: vec![bento::ShaderVariable {
             name: "u_time".to_string(),
             set: 0,
-            kind: dashi::BindGroupVariable {
-                var_type: dashi::BindGroupVariableType::Uniform,
+            kind: dashi::BindTableVariable {
+                var_type: dashi::BindTableVariableType::Uniform,
                 binding: 0,
                 count: 1,
             },

@@ -4,7 +4,7 @@ pub mod reservations;
 pub mod resolver;
 pub mod types;
 
-use dashi::{BindGroupVariableType, Context};
+use dashi::{BindTableVariableType, Context};
 use error::FurikakeError;
 use reservations::{
     ReservedItem, ReservedTiming, bindless_camera::ReservedBindlessCamera,
@@ -17,7 +17,7 @@ pub use resolver::*;
 
 pub struct ReservedMetadata {
     pub name: &'static str,
-    pub kind: BindGroupVariableType,
+    pub kind: BindTableVariableType,
 }
 
 pub trait GPUState {
@@ -98,7 +98,7 @@ mod tests {
 const DEFAULT_STATE_NAMES: [&str; 1] = ["meshi_timing"];
 const DEFAULT_METADATA: [ReservedMetadata; 1] = [ReservedMetadata {
     name: "meshi_timing",
-    kind: BindGroupVariableType::Uniform,
+    kind: BindTableVariableType::Uniform,
 }];
 
 impl GPUState for DefaultState {
@@ -200,23 +200,23 @@ const BINDLESS_STATE_NAMES: [&str; 5] = [
 const BINDLESS_METADATA: [ReservedMetadata; 5] = [
     ReservedMetadata {
         name: "meshi_timing",
-        kind: BindGroupVariableType::Uniform,
+        kind: BindTableVariableType::Uniform,
     },
     ReservedMetadata {
         name: "meshi_bindless_cameras",
-        kind: BindGroupVariableType::Storage,
+        kind: BindTableVariableType::Storage,
     },
     ReservedMetadata {
         name: "meshi_bindless_textures",
-        kind: BindGroupVariableType::Storage,
+        kind: BindTableVariableType::Storage,
     },
     ReservedMetadata {
         name: "meshi_bindless_transformations",
-        kind: BindGroupVariableType::Storage,
+        kind: BindTableVariableType::Storage,
     },
     ReservedMetadata {
         name: "meshi_bindless_materials",
-        kind: BindGroupVariableType::Storage,
+        kind: BindTableVariableType::Storage,
     },
 ];
 

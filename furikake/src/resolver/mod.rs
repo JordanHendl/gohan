@@ -1,13 +1,13 @@
 use crate::{GPUState, ReservedMetadata};
 
 #[cfg(test)]
-use dashi::BindGroupVariableType;
+use dashi::BindTableVariableType;
 
 #[derive(Default, Debug)]
 pub struct ResolveResult {
     pub name: String,
     pub exists: bool,
-    pub binding: dashi::BindGroupVariable,
+    pub binding: dashi::BindTableVariable,
     pub set: u32,
 }
 
@@ -78,7 +78,7 @@ mod tests {
         fn reserved_metadata() -> &'static [ReservedMetadata] {
             &[ReservedMetadata {
                 name: "meshi_timing",
-                kind: BindGroupVariableType::Uniform,
+                kind: BindTableVariableType::Uniform,
             }]
         }
 
@@ -128,8 +128,8 @@ mod tests {
         let res = make_result(vec![bento::ShaderVariable {
             name: "meshi_timing".to_string(),
             set: 0,
-            kind: dashi::BindGroupVariable {
-                var_type: BindGroupVariableType::Storage,
+            kind: dashi::BindTableVariable {
+                var_type: BindTableVariableType::Storage,
                 binding: 0,
                 count: 1,
             },

@@ -9,8 +9,8 @@ fn fake_result(stage: dashi::ShaderType, name: &str) -> CompilationResult {
         variables: vec![ShaderVariable {
             name: "var".to_string(),
             set: 0,
-            kind: dashi::BindGroupVariable {
-                var_type: dashi::BindGroupVariableType::Uniform,
+            kind: dashi::BindTableVariable {
+                var_type: dashi::BindTableVariableType::Uniform,
                 binding: 0,
                 count: 1,
             },

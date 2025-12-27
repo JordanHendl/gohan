@@ -40,7 +40,7 @@ pub struct ShaderVariable {
     pub name: String,
     #[serde(default)]
     pub set: u32,
-    pub kind: dashi::BindGroupVariable,
+    pub kind: dashi::BindTableVariable,
 }
 
 /// Stage-specific metadata discovered during reflection.
@@ -298,8 +298,8 @@ impl CompilationResult {
         Self::from_bytes(&bytes)
     }
 
-    pub fn bind_group_variables(&self) -> Vec<dashi::BindGroupVariable> {
-        let s: Vec<dashi::BindGroupVariable> =
+    pub fn bind_group_variables(&self) -> Vec<dashi::BindTableVariable> {
+        let s: Vec<dashi::BindTableVariable> =
             self.variables.iter().map(|a| a.kind.clone()).collect();
 
         return s;
@@ -532,20 +532,20 @@ fn reflect_bindings(
                 .unwrap_or_else(|| info.name.clone());
 
             let var_type = match info.ty {
-                DescriptorType::UNIFORM_BUFFER => dashi::BindGroupVariableType::Uniform,
+                DescriptorType::UNIFORM_BUFFER => dashi::BindTableVariableType::Uniform,
                 DescriptorType::UNIFORM_BUFFER_DYNAMIC => {
-                    dashi::BindGroupVariableType::DynamicUniform
+                    dashi::BindTableVariableType::DynamicUniform
                 }
-                DescriptorType::STORAGE_BUFFER => dashi::BindGroupVariableType::Storage,
+                DescriptorType::STORAGE_BUFFER => dashi::BindTableVariableType::Storage,
                 DescriptorType::STORAGE_BUFFER_DYNAMIC => {
-                    dashi::BindGroupVariableType::DynamicStorage
+                    dashi::BindTableVariableType::DynamicStorage
                 }
-                DescriptorType::SAMPLED_IMAGE => dashi::BindGroupVariableType::SampledImage,
-                DescriptorType::STORAGE_IMAGE => dashi::BindGroupVariableType::StorageImage,
+                DescriptorType::SAMPLED_IMAGE => dashi::BindTableVariableType::SampledImage,
+                DescriptorType::STORAGE_IMAGE => dashi::BindTableVariableType::StorageImage,
                 DescriptorType::COMBINED_IMAGE_SAMPLER => {
-                    dashi::BindGroupVariableType::SampledImage
+                    dashi::BindTableVariableType::SampledImage
                 }
-                _ => dashi::BindGroupVariableType::Uniform,
+                _ => dashi::BindTableVariableType::Uniform,
             };
 
             let count = match info.binding_count {
@@ -557,7 +557,7 @@ fn reflect_bindings(
             variables.push(ShaderVariable {
                 name,
                 set: *set,
-                kind: dashi::BindGroupVariable {
+                kind: dashi::BindTableVariable {
                     var_type,
                     binding: *binding,
                     count,
@@ -1226,8 +1226,8 @@ mod tests {
             variables: vec![ShaderVariable {
                 name: "u_time".to_string(),
                 set: 0,
-                kind: dashi::BindGroupVariable {
-                    var_type: dashi::BindGroupVariableType::Uniform,
+                kind: dashi::BindTableVariable {
+                    var_type: dashi::BindTableVariableType::Uniform,
                     binding: 0,
                     count: 1,
                 },
@@ -1318,7 +1318,7 @@ mod tests {
         assert_eq!(result.variables[0].kind.binding, 0);
         assert_eq!(
             result.variables[0].kind.var_type,
-            dashi::BindGroupVariableType::Storage
+            dashi::BindTableVariableType::Storage
         );
         assert!(result.metadata.entry_points.contains(&"main".to_string()));
         assert_eq!(result.metadata.workgroup_size, Some([1, 1, 1]));

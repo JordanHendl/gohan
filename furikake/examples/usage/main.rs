@@ -199,7 +199,6 @@ fn main() {
                 stride: std::mem::size_of::<Vertex>(),
                 rate: VertexRate::Vertex,
             },
-            bg_layouts: [None, None, None, None],
             bt_layouts,
             shaders: &[
                 PipelineShaderInfo {
@@ -318,7 +317,6 @@ fn main() {
                 vertices: vertex_buffer,
                 indices: index_buffer,
                 index_count: indices.len() as u32,
-                bind_groups: [None, None, None, None],
                 bind_tables: [Some(timing_bind_table), None, None, None],
                 ..Default::default()
             })

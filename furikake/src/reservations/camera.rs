@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use dashi::{cmd::Executable, BindGroupVariable, BufferView, CommandStream, Context, IndexedResource, ShaderResource};
+use dashi::{cmd::Executable, BindTableVariable, BufferView, CommandStream, Context, IndexedResource, ShaderResource};
 
 use crate::{error::FurikakeError, types::Camera};
 
@@ -9,7 +9,7 @@ use super::{ReservedBinding, ReservedItem};
 pub(crate) struct ReservedCamera {
     camera: Camera,
     buffer: BufferView,
-    variable: BindGroupVariable,
+    variable: BindTableVariable,
 }
 
 #[repr(C)]

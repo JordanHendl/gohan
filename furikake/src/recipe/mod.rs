@@ -1,7 +1,7 @@
 use bento::CompilationResult;
 use dashi::builders::BindTableLayoutBuilder;
 use dashi::{
-    BindGroupVariable, BindTable, BindTableInfo, BindTableLayout, Context, Handle,
+    BindTableVariable, BindTable, BindTableInfo, BindTableLayout, Context, Handle,
     IndexedBindingInfo, IndexedResource, ShaderInfo,
 };
 use std::collections::HashMap;
@@ -62,7 +62,7 @@ impl RecipeBook {
         state: &T,
         shaders: &[CompilationResult],
     ) -> Result<Self, FurikakeError> {
-        let mut table_layout_vars: HashMap<u32, Vec<(dashi::ShaderType, Vec<BindGroupVariable>)>> =
+        let mut table_layout_vars: HashMap<u32, Vec<(dashi::ShaderType, Vec<BindTableVariable>)>> =
             HashMap::new();
         let mut table_recipes: HashMap<u32, HashMap<String, IndexedBindingRecipe>> = HashMap::new();
 
@@ -143,19 +143,19 @@ mod tests {
     use crate::{DefaultState, GPUState, ReservedMetadata};
     use dashi::cmd::Executable;
     use dashi::{
-        BindGroupVariableType, BufferInfo, BufferView, CommandStream, ContextInfo, MemoryVisibility, ShaderResource, ShaderType
+        BindTableVariableType, BufferInfo, BufferView, CommandStream, ContextInfo, MemoryVisibility, ShaderResource, ShaderType
     };
 
     fn make_shader_variable(
         name: &str,
         set: u32,
-        var_type: BindGroupVariableType,
+        var_type: BindTableVariableType,
         binding: u32,
     ) -> bento::ShaderVariable {
         bento::ShaderVariable {
             name: name.to_string(),
             set,
-            kind: dashi::BindGroupVariable {
+            kind: dashi::BindTableVariable {
                 var_type,
                 binding,
                 count: 1,
@@ -186,7 +186,7 @@ mod tests {
             variables: vec![make_shader_variable(
                 "meshi_timing",
                 0,
-                BindGroupVariableType::Uniform,
+                BindTableVariableType::Uniform,
                 0,
             )],
             metadata: empty_metadata(),
@@ -272,7 +272,7 @@ mod tests {
         fn reserved_metadata() -> &'static [ReservedMetadata] {
             &[ReservedMetadata {
                 name: "bindless_test",
-                kind: BindGroupVariableType::Storage,
+                kind: BindTableVariableType::Storage,
             }]
         }
 
@@ -294,7 +294,7 @@ mod tests {
             variables: vec![make_shader_variable(
                 "bindless_test",
                 1,
-                BindGroupVariableType::Storage,
+                BindTableVariableType::Storage,
                 0,
             )],
             metadata: empty_metadata(),
