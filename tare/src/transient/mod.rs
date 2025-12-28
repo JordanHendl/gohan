@@ -3,6 +3,7 @@ use std::{
     hash::{Hash, Hasher},
     ptr::NonNull,
 };
+use std::collections::HashSet;
 
 use dashi::*;
 
@@ -268,7 +269,7 @@ impl TransientAllocator {
     // Make a transient image matching the parameters input from this frame.
     pub fn make_image(&mut self, info: &ImageInfo) -> ImageView {
         let key = ImageKey::from(info);
-        let in_use: Vec<Handle<Image>> = self
+        let in_use: HashSet<Handle<Image>> = self
             .images
             .data()
             .iter()
@@ -278,13 +279,9 @@ impl TransientAllocator {
             .available_images
             .get_mut(&key)
             .and_then(|list| {
-                while let Some(entry) = list.pop() {
-                    let handle = entry.handle;
-                    if !in_use.contains(&handle) {
-                        return Some(handle);
-                    }
-                }
-                None
+                list.iter()
+                    .rposition(|entry| !in_use.contains(&entry.handle))
+                    .map(|index| list.swap_remove(index).handle)
             })
             .unwrap_or_else(|| {
                 unsafe { self.ctx.as_mut() }
@@ -303,7 +300,7 @@ impl TransientAllocator {
     // Make a transient buffer matching the parameters input
     pub fn make_buffer(&mut self, info: &BufferInfo) -> BufferView {
         let key = BufferKey::from(info);
-        let in_use: Vec<Handle<Buffer>> = self
+        let in_use: HashSet<Handle<Buffer>> = self
             .buffers
             .data()
             .iter()
@@ -313,13 +310,9 @@ impl TransientAllocator {
             .available_buffers
             .get_mut(&key)
             .and_then(|list| {
-                while let Some(entry) = list.pop() {
-                    let handle = entry.handle;
-                    if !in_use.contains(&handle) {
-                        return Some(handle);
-                    }
-                }
-                None
+                list.iter()
+                    .rposition(|entry| !in_use.contains(&entry.handle))
+                    .map(|index| list.swap_remove(index).handle)
             })
             .unwrap_or_else(|| {
                 unsafe { self.ctx.as_mut() }
@@ -335,7 +328,7 @@ impl TransientAllocator {
     // Make a transient buffer matching the parameters input
     pub fn make_buffer_mapped(&mut self, info: &BufferInfo) -> (BufferView, *mut u8, u64) {
         let key = BufferKey::from(info);
-        let in_use: Vec<Handle<Buffer>> = self
+        let in_use: HashSet<Handle<Buffer>> = self
             .buffers
             .data()
             .iter()
@@ -345,13 +338,9 @@ impl TransientAllocator {
             .available_buffers
             .get_mut(&key)
             .and_then(|list| {
-                while let Some(entry) = list.pop() {
-                    let handle = entry.handle;
-                    if !in_use.contains(&handle) {
-                        return Some(handle);
-                    }
-                }
-                None
+                list.iter()
+                    .rposition(|entry| !in_use.contains(&entry.handle))
+                    .map(|index| list.swap_remove(index).handle)
             })
             .unwrap_or_else(|| {
                 unsafe { self.ctx.as_mut() }
@@ -393,7 +382,7 @@ impl TransientAllocator {
     }
 
     pub fn make_semaphore(&mut self) -> Handle<Semaphore> {
-        let in_use: Vec<Handle<Semaphore>> = self.semaphores.data().iter().copied().collect();
+        let in_use: HashSet<Handle<Semaphore>> = self.semaphores.data().iter().copied().collect();
         let handle = self
             .available_semaphores
             .iter()
