@@ -905,7 +905,7 @@ impl ComputePipelineBuilder {
                                 lang: ShaderLang::Infer,
                                 stage: ShaderType::Compute,
                                 optimization: OptimizationLevel::None,
-                                debug_symbols: false,
+                                debug_symbols: true,
                                 defines: HashMap::new(),
                             },
                         )
