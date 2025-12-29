@@ -1,12 +1,13 @@
 use bento::{
     BentoError, CompilationResult, Compiler, OptimizationLevel, PipelineBuildError, Request,
-    ShaderLang, builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
+    ShaderLang,
+    builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
 };
-use dashi::gpu::vulkan::{Context, ContextInfo, GPUError};
 use dashi::{
     BufferInfo, BufferUsage, BufferView, DebugMessageSeverity, DebugMessageType, DebugMessenger,
     DebugMessengerCreateInfo, IndexedResource, MemoryVisibility, ShaderResource,
 };
+use dashi::{Context, ContextInfo, gpu::vulkan::GPUError};
 use serial_test::serial;
 use std::collections::HashMap;
 use std::ffi::{CStr, c_void};
@@ -576,7 +577,8 @@ fn builds_graphics_pipeline_with_shared_uniform_bindings() {
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
         .add_variable("globals", ShaderResource::Buffer(globals))
-        .build(&mut ctx).expect("Failed to make pipeline");
+        .build(&mut ctx)
+        .expect("Failed to make pipeline");
 }
 
 #[test]

@@ -1,12 +1,11 @@
 struct Handle {
-  uint m_id;
-  uint m_gen;
+  uint m_packed;
 
   bool valid() {
-    return m_id != 0xFFFFu;
+    return id() != 0xFFFFu;
   }
 
   int id() {
-    return int(m_id);
+    return int(m_packed & 0xFFFF);
   }
 };

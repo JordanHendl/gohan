@@ -108,7 +108,7 @@ pub fn stddeferred(defines: &[String]) -> Vec<CompilationResult> {
 mod tests {
     use super::*;
     use bento::builder::GraphicsPipelineBuilder;
-    use dashi::gpu::vulkan::{Context, ContextInfo};
+    use dashi::Context;
     use std::collections::{HashMap, HashSet};
 
     #[test]
@@ -241,7 +241,7 @@ mod tests {
             used_sets.insert(var.set);
         }
 
-        let mut ctx = Context::headless(&ContextInfo::default()).expect("headless context");
+        let mut ctx = Context::headless(&dashi::ContextInfo::default()).expect("headless context");
         let mut builder = GraphicsPipelineBuilder::new()
             .vertex_compiled(Some(vertex))
             .fragment_compiled(Some(fragment));

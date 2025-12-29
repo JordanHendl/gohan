@@ -4,13 +4,18 @@ use std::{
 };
 
 use dashi::{
-    BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BindTableVariableType, BufferInfo, BufferUsage, BufferView, ComputePipeline, ComputePipelineInfo, ComputePipelineLayout, ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline, GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout, GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, MemoryVisibility, PipelineShaderInfo, SampleCount, SamplerInfo, ShaderInfo, ShaderPrimitiveType, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo
+    BindTable, BindTableInfo, BindTableLayout, BindTableLayoutInfo, BindTableVariableType,
+    BufferInfo, BufferUsage, BufferView, ComputePipeline, ComputePipelineInfo,
+    ComputePipelineLayout, ComputePipelineLayoutInfo, Context, Format, GraphicsPipeline,
+    GraphicsPipelineDetails, GraphicsPipelineInfo, GraphicsPipelineLayout,
+    GraphicsPipelineLayoutInfo, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource,
+    MemoryVisibility, PipelineShaderInfo, SampleCount, SamplerInfo, ShaderInfo,
+    ShaderPrimitiveType, ShaderResource, ShaderType, VertexDescriptionInfo, VertexEntryInfo,
 };
 
 pub use crate::PipelineBuildError;
 use crate::{
-    BentoError, CompilationResult, Compiler, MissingBinding, OptimizationLevel, Request,
-    ShaderLang,
+    BentoError, CompilationResult, Compiler, MissingBinding, OptimizationLevel, Request, ShaderLang,
 };
 
 fn merge_stage_flags(lhs: dashi::ShaderType, rhs: dashi::ShaderType) -> dashi::ShaderType {
@@ -616,12 +621,14 @@ impl GraphicsPipelineBuilder {
                 });
             }
 
-            let layout = ctx
-                .make_bind_table_layout(&BindTableLayoutInfo {
+            let layout =
+                ctx.make_bind_table_layout(&BindTableLayoutInfo {
                     debug_name: "bento_bt_layout",
                     shaders: shader_infos.as_slice(),
                 })
-                .map_err(|source| PipelineBuildError::BindTableLayoutCreateFailed { set, source })?;
+                .map_err(|source| {
+                    PipelineBuildError::BindTableLayoutCreateFailed { set, source }
+                })?;
 
             if (set as usize) < bt_layouts.len() {
                 bt_layouts[set as usize] = Some(layout);
@@ -996,12 +1003,14 @@ impl ComputePipelineBuilder {
                 variables: vars.as_slice(),
             };
 
-            let layout = ctx
-                .make_bind_table_layout(&BindTableLayoutInfo {
+            let layout =
+                ctx.make_bind_table_layout(&BindTableLayoutInfo {
                     debug_name: "bento_compute_bt_layout",
                     shaders: std::slice::from_ref(&shader_info),
                 })
-                .map_err(|source| PipelineBuildError::BindTableLayoutCreateFailed { set, source })?;
+                .map_err(|source| {
+                    PipelineBuildError::BindTableLayoutCreateFailed { set, source }
+                })?;
 
             if (set as usize) < bt_layouts.len() {
                 bt_layouts[set as usize] = Some(layout);
