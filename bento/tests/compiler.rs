@@ -100,6 +100,23 @@ fn compiles_fixture_shader_with_debug_symbols() -> Result<(), BentoError> {
 }
 
 #[test]
+fn compiles_slang_shader_with_debug_symbols() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let mut request = sample_request(ShaderLang::Slang);
+    request.debug_symbols = true;
+    let path = "tests/fixtures/simple_compute.slang";
+
+    let result = compiler.compile_from_file(path, &request)?;
+
+    assert!(!result.spirv.is_empty());
+    assert!(!result.variables.is_empty());
+    assert!(has_debug_instructions(&result.spirv));
+    assert!(!binding_names_from_spirv(&result.spirv).is_empty());
+
+    Ok(())
+}
+
+#[test]
 fn returns_missing_file_error() {
     let compiler = Compiler::new().unwrap();
     let request = sample_request(ShaderLang::Glsl);

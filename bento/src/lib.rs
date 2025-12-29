@@ -391,7 +391,7 @@ impl Compiler {
 
         let spirv = artifact.as_binary().to_vec();
         let reflection_spirv = if request.debug_symbols {
-            strip_module_processed(&spirv)
+            strip_debug_instructions(&spirv)
         } else {
             spirv.clone()
         };
@@ -521,7 +521,7 @@ fn spirv_words_to_bytes(words: &[u32]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(words.as_ptr() as *const u8, words.len() * 4) }
 }
 
-fn strip_module_processed(spirv: &[u32]) -> Vec<u32> {
+fn strip_debug_instructions(spirv: &[u32]) -> Vec<u32> {
     use rspirv::spirv::Op;
 
     if spirv.len() < 5 {
@@ -541,7 +541,20 @@ fn strip_module_processed(spirv: &[u32]) -> Vec<u32> {
             break;
         }
 
-        if opcode != Op::ModuleProcessed as u32 {
+        let is_debug = matches!(
+            opcode,
+            x if x == Op::Source as u32
+                || x == Op::SourceContinued as u32
+                || x == Op::SourceExtension as u32
+                || x == Op::Name as u32
+                || x == Op::MemberName as u32
+                || x == Op::String as u32
+                || x == Op::Line as u32
+                || x == Op::NoLine as u32
+                || x == Op::ModuleProcessed as u32
+        );
+
+        if !is_debug {
             stripped.extend_from_slice(&spirv[index..index + word_count]);
         }
 
