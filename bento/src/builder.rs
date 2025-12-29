@@ -403,13 +403,44 @@ impl GraphicsPipelineBuilder {
     }
 
     pub fn vertex(self, shader: Option<&[u8]>) -> Self {
+        let compiler = Compiler::new().unwrap();
         if let Some(bytes) = shader {
-            if let Ok(result) = CompilationResult::from_bytes(bytes) {
-                return Self {
-                    vertex: Some(result),
-                    ..self
-                };
-            }
+            return Self {
+                #[cfg(debug_assertions)]
+                vertex: Some(
+                    compiler
+                        .compile(
+                            bytes,
+                            &Request {
+                                name: None,
+                                lang: ShaderLang::Infer,
+                                stage: ShaderType::Vertex,
+                                optimization: OptimizationLevel::None,
+                                debug_symbols: true,
+                                defines: HashMap::new(),
+                            },
+                        )
+                        .unwrap(),
+                ),
+                #[cfg(not(debug_assertions))]
+                vertex: Some(
+                    compiler
+                        .compile(
+                            bytes,
+                            &Request {
+                                name: None,
+                                lang: ShaderLang::Infer,
+                                stage: ShaderType::Vertex,
+                                optimization: OptimizationLevel::Performance,
+                                debug_symbols: false,
+                                defines: HashMap::new(),
+                            },
+                        )
+                        .unwrap(),
+                ),
+
+                ..self
+            };
         }
 
         self
@@ -864,6 +895,23 @@ impl ComputePipelineBuilder {
         if let Some(shader) = shader {
             let compiler = Compiler::new().unwrap();
             return Self {
+                #[cfg(debug_assertions)]
+                shader: Some(
+                    compiler
+                        .compile(
+                            shader,
+                            &Request {
+                                name: None,
+                                lang: ShaderLang::Infer,
+                                stage: ShaderType::Compute,
+                                optimization: OptimizationLevel::None,
+                                debug_symbols: true,
+                                defines: HashMap::new(),
+                            },
+                        )
+                        .unwrap(),
+                ),
+                #[cfg(not(debug_assertions))]
                 shader: Some(
                     compiler
                         .compile(
