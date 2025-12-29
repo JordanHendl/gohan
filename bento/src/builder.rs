@@ -416,7 +416,7 @@ impl GraphicsPipelineBuilder {
                                 lang: ShaderLang::Infer,
                                 stage: ShaderType::Vertex,
                                 optimization: OptimizationLevel::None,
-                                debug_symbols: true,
+                                debug_symbols: false,
                                 defines: HashMap::new(),
                             },
                         )
@@ -905,7 +905,7 @@ impl ComputePipelineBuilder {
                                 lang: ShaderLang::Infer,
                                 stage: ShaderType::Compute,
                                 optimization: OptimizationLevel::None,
-                                debug_symbols: true,
+                                debug_symbols: false,
                                 defines: HashMap::new(),
                             },
                         )
