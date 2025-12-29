@@ -21,6 +21,37 @@ fn binding_names_from_spirv(spirv: &[u32]) -> Vec<(u32, String)> {
         .unwrap_or_default()
 }
 
+fn has_debug_instructions(spirv: &[u32]) -> bool {
+    use rspirv::spirv::Op;
+
+    if spirv.len() < 5 {
+        return false;
+    }
+
+    let mut index = 5;
+    while index < spirv.len() {
+        let word = spirv[index];
+        let word_count = (word >> 16) as usize;
+        let opcode = (word & 0xFFFF) as u32;
+
+        if word_count == 0 || index + word_count > spirv.len() {
+            break;
+        }
+
+        if opcode == Op::Line as u32
+            || opcode == Op::Name as u32
+            || opcode == Op::Source as u32
+            || opcode == Op::String as u32
+        {
+            return true;
+        }
+
+        index += word_count;
+    }
+
+    false
+}
+
 fn sample_request(lang: ShaderLang) -> Request {
     Request {
         name: Some("sample".to_string()),
@@ -47,6 +78,23 @@ fn compiles_fixture_shader() -> Result<(), BentoError> {
     assert!(!result.variables.is_empty());
     assert!(result.metadata.entry_points.contains(&"main".to_string()));
     assert_eq!(result.metadata.workgroup_size, Some([1, 1, 1]));
+
+    Ok(())
+}
+
+#[test]
+fn compiles_fixture_shader_with_debug_symbols() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let mut request = sample_request(ShaderLang::Glsl);
+    request.debug_symbols = true;
+    let path = "tests/fixtures/simple_compute.glsl";
+
+    let result = compiler.compile_from_file(path, &request)?;
+
+    assert!(!result.spirv.is_empty());
+    assert!(!result.variables.is_empty());
+    assert!(has_debug_instructions(&result.spirv));
+    assert!(!binding_names_from_spirv(&result.spirv).is_empty());
 
     Ok(())
 }
