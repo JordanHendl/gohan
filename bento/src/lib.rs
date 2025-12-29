@@ -389,12 +389,24 @@ impl Compiler {
             )
             .map_err(|e| BentoError::ShaderCompilation(e.to_string()))?;
 
-        let mut spirv = artifact.as_binary().to_vec();
-        let spirv_bytes = spirv_words_to_bytes(&spirv);
-        let variables = reflect_bindings(spirv_bytes, source, resolved_lang)?;
-        spirv = rewrite_spirv_binding_names(&spirv, &variables)?;
-        let spirv_bytes = spirv_words_to_bytes(&spirv);
-        let metadata = reflect_metadata(spirv_bytes)?;
+        let spirv = artifact.as_binary().to_vec();
+        let reflection_spirv = if request.debug_symbols {
+            strip_debug_instructions(&spirv)
+        } else {
+            spirv.clone()
+        };
+        let variables =
+            reflect_bindings(spirv_words_to_bytes(&reflection_spirv), source, resolved_lang)?;
+        let rewritten_for_metadata = rewrite_spirv_binding_names(&reflection_spirv, &variables)?;
+        let metadata = reflect_metadata(spirv_words_to_bytes(&rewritten_for_metadata))?;
+        let spirv = if request.debug_symbols {
+            match rewrite_spirv_binding_names(&spirv, &variables) {
+                Ok(rewritten) => rewritten,
+                Err(_) => spirv,
+            }
+        } else {
+            rewritten_for_metadata
+        };
 
         Ok(CompilationResult {
             name: request.name.clone(),
@@ -507,6 +519,49 @@ struct SourceBinding {
 
 fn spirv_words_to_bytes(words: &[u32]) -> &[u8] {
     unsafe { std::slice::from_raw_parts(words.as_ptr() as *const u8, words.len() * 4) }
+}
+
+fn strip_debug_instructions(spirv: &[u32]) -> Vec<u32> {
+    use rspirv::spirv::Op;
+
+    if spirv.len() < 5 {
+        return spirv.to_vec();
+    }
+
+    let mut stripped = Vec::with_capacity(spirv.len());
+    stripped.extend_from_slice(&spirv[..5]);
+
+    let mut index = 5;
+    while index < spirv.len() {
+        let word = spirv[index];
+        let word_count = (word >> 16) as usize;
+        let opcode = (word & 0xFFFF) as u32;
+
+        if word_count == 0 || index + word_count > spirv.len() {
+            break;
+        }
+
+        let is_debug = matches!(
+            opcode,
+            x if x == Op::Source as u32
+                || x == Op::SourceContinued as u32
+                || x == Op::SourceExtension as u32
+                || x == Op::Name as u32
+                || x == Op::MemberName as u32
+                || x == Op::String as u32
+                || x == Op::Line as u32
+                || x == Op::NoLine as u32
+                || x == Op::ModuleProcessed as u32
+        );
+
+        if !is_debug {
+            stripped.extend_from_slice(&spirv[index..index + word_count]);
+        }
+
+        index += word_count;
+    }
+
+    stripped
 }
 
 fn reflect_bindings(
