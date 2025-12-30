@@ -7,9 +7,7 @@ pub mod types;
 use dashi::{BindTableVariableType, Context};
 use error::FurikakeError;
 use reservations::{
-    ReservedItem, ReservedTiming, bindless_camera::ReservedBindlessCamera,
-    bindless_materials::ReservedBindlessMaterials, bindless_textures::ReservedBindlessTextures,
-    bindless_transformations::ReservedBindlessTransformations,
+    bindless_camera::ReservedBindlessCamera, bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials, bindless_textures::ReservedBindlessTextures, bindless_transformations::ReservedBindlessTransformations, ReservedItem, ReservedTiming
 };
 use std::{collections::HashMap, ptr::NonNull};
 
@@ -190,14 +188,15 @@ impl DefaultState {
 ///////////////////////////////////////////////////////////
 ///
 
-const BINDLESS_STATE_NAMES: [&str; 5] = [
+const BINDLESS_STATE_NAMES: [&str; 6] = [
     "meshi_timing",
     "meshi_bindless_cameras",
     "meshi_bindless_textures",
     "meshi_bindless_transformations",
     "meshi_bindless_materials",
+    "meshi_bindless_lights",
 ];
-const BINDLESS_METADATA: [ReservedMetadata; 5] = [
+const BINDLESS_METADATA: [ReservedMetadata; 6] = [
     ReservedMetadata {
         name: "meshi_timing",
         kind: BindTableVariableType::Uniform,
@@ -208,7 +207,7 @@ const BINDLESS_METADATA: [ReservedMetadata; 5] = [
     },
     ReservedMetadata {
         name: "meshi_bindless_textures",
-        kind: BindTableVariableType::Storage,
+        kind: BindTableVariableType::SampledImage,
     },
     ReservedMetadata {
         name: "meshi_bindless_transformations",
@@ -216,6 +215,10 @@ const BINDLESS_METADATA: [ReservedMetadata; 5] = [
     },
     ReservedMetadata {
         name: "meshi_bindless_materials",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
+        name: "meshi_bindless_lights",
         kind: BindTableVariableType::Storage,
     },
 ];
@@ -255,6 +258,10 @@ impl BindlessState {
         reserved.insert(
             names[4].to_string(),
             Box::new(ReservedBindlessMaterials::new(ctx)),
+        );
+        reserved.insert(
+            names[5].to_string(),
+            Box::new(ReservedBindlessLights::new(ctx)),
         );
 
         Self {

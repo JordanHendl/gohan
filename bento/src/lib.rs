@@ -1010,6 +1010,15 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
             name: parsed.name,
             order: parsed.order,
         });
+
+        for (binding_index, parsed) in set_bindings.iter().enumerate() {
+            bindings.push(SourceBinding {
+                set: *set,
+                binding: Some(binding_index as u32),
+                name: parsed.name.clone(),
+                order: parsed.order,
+            });
+        }
     }
 
     bindings.sort_by_key(|b| b.order);
