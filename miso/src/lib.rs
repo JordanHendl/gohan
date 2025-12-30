@@ -25,9 +25,12 @@ fn resolve_imports(
     visited: &mut HashSet<PathBuf>,
 ) -> std::io::Result<String> {
     let source = fs::read_to_string(path)?;
+    let display_path = path.display().to_string();
     let mut resolved = String::new();
 
-    for line in source.lines() {
+    resolved.push_str(&format!("#line 1 \"{display_path}\"\n"));
+
+    for (line_index, line) in source.lines().enumerate() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("import ") {
             let module_name = rest.trim_end_matches(';').trim();
@@ -40,6 +43,8 @@ fn resolve_imports(
                 resolved.push_str(&format!("\n// end include {module_name}\n"));
             }
 
+            let next_line = line_index + 2;
+            resolved.push_str(&format!("#line {next_line} \"{display_path}\"\n"));
             continue;
         }
 
