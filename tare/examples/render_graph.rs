@@ -148,7 +148,7 @@ fn main() {
         });
         let draw_pass = SubpassInfo {
             viewport,
-            color_attachments: fill![Some(target); None; 8],
+            color_attachments: fill![Some(target.view); None; 8],
             depth_attachment: None,
             clear_values: fill![Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])), None; None; 8],
             depth_clear: None,
@@ -204,7 +204,7 @@ fn main() {
         let cmd = CommandStream::new()
             .begin()
             .blit_images(&BlitImage {
-                src: target.img,
+                src: target.view.img,
                 dst: img.img,
                 ..Default::default()
             })

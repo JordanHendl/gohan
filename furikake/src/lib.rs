@@ -4,12 +4,13 @@ pub mod reservations;
 pub mod resolver;
 pub mod types;
 
-use dashi::{cmd::Executable, BindTableVariableType, CommandStream, Context};
+use dashi::{cmd::Executable, BindTableVariableType, CommandStream, Context, ImageView};
 use error::FurikakeError;
 use reservations::{
     bindless_camera::ReservedBindlessCamera, bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials, bindless_textures::ReservedBindlessTextures, bindless_transformations::ReservedBindlessTransformations, ReservedItem, ReservedTiming
 };
 use std::{collections::HashMap, ptr::NonNull};
+use tare::transient::BindlessTextureRegistry;
 
 pub use resolver::*;
 
@@ -323,5 +324,23 @@ impl BindlessState {
             .ok_or(FurikakeError::ReservedItemTypeMismatch {
                 name: key.to_string(),
             })
+    }
+}
+
+impl BindlessTextureRegistry for BindlessState {
+    fn add_texture(&mut self, view: ImageView) -> u16 {
+        let mut id = None;
+        self.reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
+            id = Some(textures.add_texture(view));
+        })
+        .expect("register bindless texture in furikake");
+        id.expect("bindless texture id")
+    }
+
+    fn remove_texture(&mut self, id: u16) {
+        self.reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
+            textures.remove_texture(id);
+        })
+        .expect("remove bindless texture in furikake");
     }
 }

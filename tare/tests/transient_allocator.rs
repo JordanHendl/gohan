@@ -36,7 +36,7 @@ fn transient_allocator_avoids_in_frame_reuse() {
     let second_image = allocator.make_image(&image_info);
 
     assert_ne!(
-        first_image.img, second_image.img,
+        first_image.view.img, second_image.view.img,
         "images allocated in the same frame should not share handles"
     );
 }

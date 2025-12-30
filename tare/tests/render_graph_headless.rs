@@ -24,7 +24,7 @@ fn headless_render_graph_executes_without_validation_noise() {
 
     let subpass = SubpassInfo {
         viewport: Viewport::default(),
-        color_attachments: [Some(target), None, None, None, None, None, None, None],
+        color_attachments: [Some(target.view), None, None, None, None, None, None, None],
         depth_attachment: None,
         clear_values: [
             Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])),
@@ -72,7 +72,7 @@ fn headless_render_graph_outputs_readable_image() {
     graph.add_subpass(
         &SubpassInfo {
             viewport: Viewport::default(),
-            color_attachments: [Some(target), None, None, None, None, None, None, None],
+            color_attachments: [Some(target.view), None, None, None, None, None, None, None],
             depth_attachment: None,
             clear_values: [
                 Some(ClearValue::Color([
@@ -119,7 +119,7 @@ fn headless_render_graph_outputs_readable_image() {
             let stream = CommandStream::new()
                 .begin()
                 .copy_image_to_buffer(&CopyImageBuffer {
-                    src: target.img,
+                    src: target.view.img,
                     dst: readback,
                     range: SubresourceRange::default(),
                     dst_offset: 0,
@@ -169,7 +169,7 @@ fn render_graph_can_reuse_allocator() {
     graph.add_subpass(
         &SubpassInfo {
             viewport: Viewport::default(),
-            color_attachments: [Some(target), None, None, None, None, None, None, None],
+            color_attachments: [Some(target.view), None, None, None, None, None, None, None],
             depth_attachment: None,
             clear_values: [
                 Some(ClearValue::Color([1.0, 0.0, 0.0, 1.0])),

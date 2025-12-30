@@ -16,6 +16,7 @@ struct FSOutput
     float4 position : SV_TARGET0;
     float4 albedo : SV_TARGET1;
     float4 normal : SV_TARGET2;
+    float4 material_code : SV_TARGET3;
 };
 
 bool valid_texture(uint texture_id) {
@@ -41,6 +42,6 @@ FSOutput main(FSInput input)
     output.position = float4(input.world_pos, 1.0);
     output.albedo = base_color;
     output.normal = float4(ortho_normal, 1.0);
+    output.material_code = float4(float(per_obj.material_id.id()), 0.0, 0.0, 1.0);
     return output;
 }
-
