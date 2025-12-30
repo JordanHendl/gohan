@@ -1,6 +1,6 @@
 // Fragment Shader (fragment.slang)
-import bindless;
 import bindless_draw;
+import bindless;
 import miso;
 
 struct FSInput

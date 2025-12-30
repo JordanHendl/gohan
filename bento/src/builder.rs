@@ -416,7 +416,7 @@ impl PSOBuilder {
                                 lang: ShaderLang::Infer,
                                 stage: ShaderType::Vertex,
                                 optimization: OptimizationLevel::None,
-                                debug_symbols: false,
+                                debug_symbols: true,
                                 defines: HashMap::new(),
                             },
                         )
