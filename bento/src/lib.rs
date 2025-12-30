@@ -395,12 +395,13 @@ impl Compiler {
         } else {
             spirv.clone()
         };
-        let variables =
+        let reflected =
             reflect_bindings(spirv_words_to_bytes(&reflection_spirv), source, resolved_lang)?;
+        let variables = reflected.variables;
         let rewritten_for_metadata = if request.debug_symbols {
-            rewrite_spirv_binding_names(&spirv, &variables)
+            rewrite_spirv_binding_names(&spirv, &variables, &reflected.remap)
         } else {
-            rewrite_spirv_binding_names(&reflection_spirv, &variables)
+            rewrite_spirv_binding_names(&reflection_spirv, &variables, &reflected.remap)
         }
         .unwrap_or_else(|_| reflection_spirv.clone());
         let metadata = reflect_metadata(spirv_words_to_bytes(&rewritten_for_metadata))?;
@@ -562,11 +563,16 @@ fn strip_debug_instructions(spirv: &[u32]) -> Vec<u32> {
     stripped
 }
 
+struct ReflectedBindings {
+    variables: Vec<ShaderVariable>,
+    remap: HashMap<(u32, u32), (u32, u32)>,
+}
+
 fn reflect_bindings(
     spirv_bytes: &[u8],
     source: &str,
     lang: ShaderLang,
-) -> Result<Vec<ShaderVariable>, BentoError> {
+) -> Result<ReflectedBindings, BentoError> {
     use rspirv_reflect::{BindingCount, DescriptorType, Reflection};
 
     let reflection = Reflection::new_from_spirv(spirv_bytes)
@@ -578,11 +584,26 @@ fn reflect_bindings(
         .map_err(|e| BentoError::ShaderCompilation(e.to_string()))?;
 
     let mut variables = Vec::new();
+    let mut remap = HashMap::new();
 
     for (set, bindings) in descriptor_sets.iter() {
         for (binding, info) in bindings.iter() {
-            let name = take_source_name(*set, *binding, &mut source_bindings)
+            let source_binding = take_source_binding(*set, *binding, &mut source_bindings);
+            let name = source_binding
+                .as_ref()
+                .map(|binding| binding.name.clone())
                 .unwrap_or_else(|| info.name.clone());
+            if name.trim().is_empty() {
+                return Err(BentoError::ShaderCompilation(format!(
+                    "Unable to determine binding name for set {set} binding {binding} from source"
+                )));
+            }
+            let (resolved_set, resolved_binding) = source_binding
+                .and_then(|binding| binding.binding.map(|slot| (binding.set, slot)))
+                .unwrap_or((*set, *binding));
+            if (resolved_set, resolved_binding) != (*set, *binding) {
+                remap.insert((*set, *binding), (resolved_set, resolved_binding));
+            }
 
             let var_type = match info.ty {
                 DescriptorType::UNIFORM_BUFFER => dashi::BindTableVariableType::Uniform,
@@ -609,10 +630,10 @@ fn reflect_bindings(
 
             variables.push(ShaderVariable {
                 name,
-                set: *set,
+                set: resolved_set,
                 kind: dashi::BindTableVariable {
                     var_type,
-                    binding: *binding,
+                    binding: resolved_binding,
                     count,
                 },
             });
@@ -625,12 +646,13 @@ fn reflect_bindings(
             .then_with(|| a.kind.binding.cmp(&b.kind.binding))
     });
 
-    Ok(variables)
+    Ok(ReflectedBindings { variables, remap })
 }
 
 fn rewrite_spirv_binding_names(
     spirv: &[u32],
     variables: &[ShaderVariable],
+    remap: &HashMap<(u32, u32), (u32, u32)>,
 ) -> Result<Vec<u32>, BentoError> {
     use rspirv_reflect::Reflection;
 
@@ -671,8 +693,57 @@ fn rewrite_spirv_binding_names(
         }
     }
 
+    let mut remap_by_id = HashMap::new();
+    for (old, new) in remap {
+        if let Some(id) = ids_by_binding.get(old) {
+            remap_by_id.insert(*id, *new);
+        }
+    }
+
+    for annotation in module.annotations.iter_mut() {
+        if annotation.class.opcode != spirv::Op::Decorate {
+            continue;
+        }
+
+        let Some(Operand::IdRef(id)) = annotation.operands.get(0) else {
+            continue;
+        };
+        let Some((new_set, new_binding)) = remap_by_id.get(id) else {
+            continue;
+        };
+        let Some(Operand::Decoration(decoration)) = annotation.operands.get(1) else {
+            continue;
+        };
+
+        match decoration {
+            spirv::Decoration::DescriptorSet => {
+                if annotation.operands.len() >= 3 {
+                    annotation.operands[2] = Operand::LiteralBit32(*new_set);
+                }
+            }
+            spirv::Decoration::Binding => {
+                if annotation.operands.len() >= 3 {
+                    annotation.operands[2] = Operand::LiteralBit32(*new_binding);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    let mut remap_inverse = HashMap::new();
+    for (old, new) in remap {
+        remap_inverse.insert(*new, *old);
+    }
+
     for variable in variables {
-        let Some(id) = ids_by_binding.get(&(variable.set, variable.kind.binding)) else {
+        let id = ids_by_binding
+            .get(&(variable.set, variable.kind.binding))
+            .or_else(|| {
+                remap_inverse
+                    .get(&(variable.set, variable.kind.binding))
+                    .and_then(|old| ids_by_binding.get(old))
+            });
+        let Some(id) = id else {
             continue;
         };
 
@@ -731,29 +802,48 @@ fn parse_glsl_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
             BentoError::ShaderCompilation(format!("Invalid GLSL reflection regex: {e}"))
         })?;
 
-    Ok(regex
-        .captures_iter(source)
-        .enumerate()
-        .filter_map(|(index, captures)| {
-            let set = captures
-                .get(1)
-                .and_then(|m| m.as_str().parse::<u32>().ok())?;
-            let binding = captures
-                .get(2)
-                .and_then(|m| m.as_str().parse::<u32>().ok())?;
-            let declaration_start = captures.get(0).map(|m| m.end())?;
-            let declaration = glsl_declaration_from(source, declaration_start)?;
+    let mut bindings = Vec::new();
 
-            let name = extract_binding_name(&declaration)?;
+    for (index, captures) in regex.captures_iter(source).enumerate() {
+        let set = captures
+            .get(1)
+            .and_then(|m| m.as_str().parse::<u32>().ok())
+            .ok_or_else(|| {
+                BentoError::ShaderCompilation("Missing GLSL descriptor set index".into())
+            })?;
+        let binding = captures
+            .get(2)
+            .and_then(|m| m.as_str().parse::<u32>().ok())
+            .ok_or_else(|| {
+                BentoError::ShaderCompilation("Missing GLSL descriptor binding index".into())
+            })?;
+        let declaration_start = captures.get(0).map(|m| m.end()).ok_or_else(|| {
+            BentoError::ShaderCompilation("Missing GLSL binding declaration".into())
+        })?;
+        let declaration = glsl_declaration_from(source, declaration_start).ok_or_else(|| {
+            BentoError::ShaderCompilation("Missing GLSL binding declaration".into())
+        })?;
 
-            Some(SourceBinding {
-                set,
-                binding: Some(binding),
-                name,
-                order: index,
-            })
-        })
-        .collect())
+        let name = extract_binding_name(&declaration).ok_or_else(|| {
+            BentoError::ShaderCompilation(format!(
+                "Unable to determine GLSL binding name for set {set} binding {binding}"
+            ))
+        })?;
+        if name.trim().is_empty() {
+            return Err(BentoError::ShaderCompilation(format!(
+                "Unable to determine GLSL binding name for set {set} binding {binding}"
+            )));
+        }
+
+        bindings.push(SourceBinding {
+            set,
+            binding: Some(binding),
+            name,
+            order: index,
+        });
+    }
+
+    Ok(bindings)
 }
 
 fn glsl_declaration_from(source: &str, start: usize) -> Option<String> {
@@ -798,60 +888,24 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid vk::binding regex: {e}")))?;
     let resource_regex = Regex::new(
-        r"(?m)^\s*(?:RW?Texture\w+|RW?StructuredBuffer|StructuredBuffer|ConstantBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|AccelerationStructure|Texture\w+|Sampler\w*)[^;\n]*?\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*([tubcs]?)\s*(\d+)\s*\))?",
+        r"(?m)^\s*(?:uniform\s+)?(?:RW?Texture\w+|RW?StructuredBuffer|StructuredBuffer|ConstantBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|AccelerationStructure|Texture\w+|Sampler\w*)[^;\n]*?\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*",
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid HLSL reflection regex: {e}")))?;
 
     let cbuffer_regex = Regex::new(
-        r"(?m)^\s*(?:cbuffer|ConstantBuffer)\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*b(\d+)\s*\))?",
+        r"(?m)^\s*(?:cbuffer|ConstantBuffer)\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*",
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid constant buffer regex: {e}")))?;
-
-    #[derive(Clone, Copy, Eq, PartialEq)]
-    enum RegisterType {
-        Texture,
-        CBuffer,
-        Storage,
-        Sampler,
-    }
-
-    fn register_priority(register_type: RegisterType) -> u8 {
-        match register_type {
-            RegisterType::Texture => 0,
-            RegisterType::CBuffer => 1,
-            RegisterType::Storage => 2,
-            RegisterType::Sampler => 3,
-        }
-    }
-
-    fn classify_register(declaration: &str, register_letter: Option<char>) -> RegisterType {
-        match register_letter {
-            Some('t') => RegisterType::Texture,
-            Some('b') => RegisterType::CBuffer,
-            Some('u') => RegisterType::Storage,
-            Some('s') => RegisterType::Sampler,
-            _ => {
-                let lower = declaration.to_ascii_lowercase();
-
-                if lower.contains("sampler") {
-                    RegisterType::Sampler
-                } else if lower.contains("cbuffer") || lower.contains("constantbuffer") {
-                    RegisterType::CBuffer
-                } else if lower.contains("byteaddressbuffer") || lower.contains("rw") {
-                    RegisterType::Storage
-                } else {
-                    RegisterType::Texture
-                }
-            }
-        }
-    }
+    let register_regex = Regex::new(
+        r"register\(\s*([tubcs])\s*(\d+)\s*(?:,\s*space\s*(\d+)\s*)?\)",
+    )
+    .map_err(|e| BentoError::ShaderCompilation(format!("Invalid register regex: {e}")))?;
 
     struct ParsedBinding {
         name: String,
         set: u32,
         order: usize,
         register_index: Option<u32>,
-        register_type: RegisterType,
     }
 
     let mut explicit_bindings = Vec::new();
@@ -867,8 +921,11 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
             continue;
         };
         let declaration = declaration_match.as_str();
-        let name = extract_binding_name(declaration)
-            .unwrap_or_else(|| format!("binding_{set}_{index}"));
+        let name = extract_binding_name(declaration).ok_or_else(|| {
+            BentoError::ShaderCompilation(format!(
+                "Unable to determine HLSL binding name for set {set} binding {binding:?}"
+            ))
+        })?;
         let Some(binding) = binding else {
             continue;
         };
@@ -890,20 +947,28 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
         let name = captures
             .get(1)
             .map(|m| m.as_str().to_string())
-            .unwrap_or_else(|| format!("resource_{index}"));
-        let register_letter = captures
-            .get(2)
-            .and_then(|m| m.as_str().chars().next())
-            .filter(|c| c.is_ascii_alphabetic());
-        let register_index = captures.get(3).and_then(|m| m.as_str().parse::<u32>().ok());
-        let register_type = classify_register(declaration_match.as_str(), register_letter);
+            .filter(|name| !name.trim().is_empty())
+            .ok_or_else(|| {
+                BentoError::ShaderCompilation(format!(
+                    "Unable to determine HLSL binding name for resource index {index}"
+                ))
+            })?;
+        let register_capture = register_regex.captures(declaration_match.as_str());
+        let register_index = register_capture
+            .as_ref()
+            .and_then(|capture| capture.get(2))
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let set = register_capture
+            .as_ref()
+            .and_then(|capture| capture.get(3))
+            .and_then(|m| m.as_str().parse::<u32>().ok())
+            .unwrap_or(0);
 
         parsed_bindings.push(ParsedBinding {
             name,
-            set: 0,
+            set,
             order: index,
             register_index,
-            register_type,
         });
     }
 
@@ -918,34 +983,31 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
         };
         let declaration = declaration_match.as_str();
         let name = extract_binding_name(declaration).unwrap_or(fallback_name);
-        let register_index = captures.get(2).and_then(|m| m.as_str().parse::<u32>().ok());
+        let register_capture = register_regex.captures(declaration_match.as_str());
+        let register_index = register_capture
+            .as_ref()
+            .and_then(|capture| capture.get(2))
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let set = register_capture
+            .as_ref()
+            .and_then(|capture| capture.get(3))
+            .and_then(|m| m.as_str().parse::<u32>().ok())
+            .unwrap_or(0);
 
         parsed_bindings.push(ParsedBinding {
             name,
-            set: 0,
+            set,
             order: starting_index + offset,
             register_index,
-            register_type: RegisterType::CBuffer,
         });
     }
 
-    parsed_bindings.sort_by(|a, b| {
-        register_priority(a.register_type)
-            .cmp(&register_priority(b.register_type))
-            .then_with(|| {
-                a.register_index
-                    .unwrap_or(u32::MAX)
-                    .cmp(&b.register_index.unwrap_or(u32::MAX))
-            })
-            .then_with(|| a.order.cmp(&b.order))
-    });
-
     let mut bindings = Vec::new();
-    for (binding_index, parsed) in parsed_bindings.iter().enumerate() {
+    for parsed in parsed_bindings {
         bindings.push(SourceBinding {
             set: parsed.set,
-            binding: Some(binding_index as u32),
-            name: parsed.name.clone(),
+            binding: parsed.register_index,
+            name: parsed.name,
             order: parsed.order,
         });
     }
@@ -958,19 +1020,23 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
     Ok(explicit_bindings)
 }
 
-fn take_source_name(set: u32, binding: u32, sources: &mut Vec<SourceBinding>) -> Option<String> {
+fn take_source_binding(
+    set: u32,
+    binding: u32,
+    sources: &mut Vec<SourceBinding>,
+) -> Option<SourceBinding> {
     if let Some(index) = sources
         .iter()
         .position(|src| src.set == set && src.binding == Some(binding))
     {
-        return Some(sources.swap_remove(index).name);
+        return Some(sources.swap_remove(index));
     }
 
     if let Some(index) = sources
         .iter()
         .position(|src| src.set == set && src.binding.is_none())
     {
-        return Some(sources.swap_remove(index).name);
+        return Some(sources.swap_remove(index));
     }
 
     None
@@ -1493,8 +1559,8 @@ ConstantBuffer<SceneCamera> camera : register(b6);
             names_by_binding.insert(binding.binding.unwrap_or_default(), binding.name);
         }
 
-        assert_eq!(names_by_binding.get(&0), Some(&"camera".to_string()));
-        assert_eq!(names_by_binding.get(&1), Some(&"SceneCamera".to_string()));
+        assert_eq!(names_by_binding.get(&6), Some(&"camera".to_string()));
+        assert_eq!(names_by_binding.get(&5), Some(&"SceneCamera".to_string()));
 
         Ok(())
     }
