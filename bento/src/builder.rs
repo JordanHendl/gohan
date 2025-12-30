@@ -389,6 +389,7 @@ pub struct PSOBuilder {
     vertex: Option<CompilationResult>,
     fragment: Option<CompilationResult>,
     table_variables: HashMap<String, BindTableVariable>,
+    attachment_formats: HashMap<String, Format>,
     details: GraphicsPipelineDetails,
 }
 
@@ -398,6 +399,7 @@ impl PSOBuilder {
             vertex: None,
             fragment: None,
             table_variables: HashMap::new(),
+            attachment_formats: HashMap::new(),
             details: GraphicsPipelineDetails::default(),
         }
     }
@@ -527,11 +529,22 @@ impl PSOBuilder {
         Self { details, ..self }
     }
 
+    pub fn set_attachment_format(self, name: &str, format: Format) -> Self {
+        let mut attachment_formats = self.attachment_formats;
+        attachment_formats.insert(name.to_string(), format);
+
+        Self {
+            attachment_formats,
+            ..self
+        }
+    }
+
     pub fn build(self, ctx: &mut dashi::Context) -> Result<PSO, BentoError> {
         let PSOBuilder {
             vertex,
             fragment,
             table_variables,
+            attachment_formats,
             details,
         } = self;
 
@@ -794,6 +807,10 @@ impl PSOBuilder {
             .outputs
             .iter()
             .map(|iv| {
+                if let Some(format) = attachment_formats.get(&iv.name).copied() {
+                    return format;
+                }
+
                 let fmt = iv.format.unwrap_or(ShaderPrimitiveType::Vec4);
                 match fmt {
                     ShaderPrimitiveType::Vec2 => Format::RGB8,
