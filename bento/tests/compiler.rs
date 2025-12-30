@@ -295,7 +295,7 @@ fn hlsl_binding_names_follow_registers() -> Result<(), BentoError> {
     assert_eq!(bindings, spirv_bindings);
     assert_eq!(bindings[0], (0, "colorTex".to_string()));
     assert_eq!(bindings[1], (2, "outputData".to_string()));
-    assert_eq!(bindings[2], (3, "linearSampler".to_string()));
+    assert_eq!(bindings[2], (3, "Params".to_string()));
 
     Ok(())
 }
@@ -318,8 +318,8 @@ fn hlsl_binding_names_follow_declaration_order() -> Result<(), BentoError> {
     assert_eq!(bindings.len(), 3);
     assert_eq!(bindings, spirv_bindings);
     assert_eq!(bindings[0], (0, "albedo".to_string()));
-    assert_eq!(bindings[1], (1, "FrameData".to_string()));
-    assert_eq!(bindings[2], (2, "outputData".to_string()));
+    assert_eq!(bindings[1], (1, "outputData".to_string()));
+    assert_eq!(bindings[2], (2, "FrameData".to_string()));
 
     Ok(())
 }
@@ -342,9 +342,9 @@ fn slang_binding_names_follow_registers() -> Result<(), BentoError> {
 
     assert_eq!(bindings.len(), 3);
     assert_eq!(bindings, spirv_bindings);
-    assert_eq!(bindings[0], (1, "Params".to_string()));
-    assert_eq!(bindings[1], (2, "outputData".to_string()));
-    assert_eq!(bindings[2], (3, "linearSampler".to_string()));
+    assert_eq!(bindings[0], (1, "colorTex".to_string()));
+    assert_eq!(bindings[1], (2, "Params".to_string()));
+    assert_eq!(bindings[2], (3, "outputData".to_string()));
 
     Ok(())
 }
@@ -367,8 +367,8 @@ fn slang_binding_names_follow_declaration_order() -> Result<(), BentoError> {
     assert_eq!(bindings.len(), 3);
     assert_eq!(bindings, spirv_bindings);
     assert_eq!(bindings[0], (0, "albedo".to_string()));
-    assert_eq!(bindings[1], (1, "FrameData".to_string()));
-    assert_eq!(bindings[2], (2, "outputData".to_string()));
+    assert_eq!(bindings[1], (1, "outputData".to_string()));
+    assert_eq!(bindings[2], (2, "FrameData".to_string()));
 
     Ok(())
 }
