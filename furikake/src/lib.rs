@@ -4,7 +4,7 @@ pub mod reservations;
 pub mod resolver;
 pub mod types;
 
-use dashi::{BindTableVariableType, Context};
+use dashi::{cmd::Executable, BindTableVariableType, CommandStream, Context};
 use error::FurikakeError;
 use reservations::{
     bindless_camera::ReservedBindlessCamera, bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials, bindless_textures::ReservedBindlessTextures, bindless_transformations::ReservedBindlessTransformations, ReservedItem, ReservedTiming
@@ -280,12 +280,12 @@ impl BindlessState {
         })
     }
 
-    pub fn update(&mut self) -> Result<(), FurikakeError> {
-        let ctx: &mut Context = unsafe { self.ctx.as_mut() };
+    pub fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+        let mut cmd = CommandStream::new().begin();
         for iter in &mut self.reserved {
-            iter.1.update()?;
+            cmd = cmd.combine(iter.1.update()?);
         }
-        Ok(())
+        Ok(cmd.end())
     }
 
     pub fn reserved_mut<T: 'static, F: FnOnce(&mut T)>(
