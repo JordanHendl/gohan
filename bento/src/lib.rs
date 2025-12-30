@@ -397,16 +397,14 @@ impl Compiler {
         };
         let variables =
             reflect_bindings(spirv_words_to_bytes(&reflection_spirv), source, resolved_lang)?;
-        let rewritten_for_metadata = rewrite_spirv_binding_names(&reflection_spirv, &variables)?;
-        let metadata = reflect_metadata(spirv_words_to_bytes(&rewritten_for_metadata))?;
-        let spirv = if request.debug_symbols {
-            match rewrite_spirv_binding_names(&spirv, &variables) {
-                Ok(rewritten) => rewritten,
-                Err(_) => spirv,
-            }
+        let rewritten_for_metadata = if request.debug_symbols {
+            rewrite_spirv_binding_names(&spirv, &variables)
         } else {
-            rewritten_for_metadata
-        };
+            rewrite_spirv_binding_names(&reflection_spirv, &variables)
+        }
+        .unwrap_or_else(|_| reflection_spirv.clone());
+        let metadata = reflect_metadata(spirv_words_to_bytes(&rewritten_for_metadata))?;
+        let spirv = rewritten_for_metadata;
 
         Ok(CompilationResult {
             name: request.name.clone(),
@@ -795,6 +793,10 @@ fn glsl_declaration_from(source: &str, start: usize) -> Option<String> {
 }
 
 fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
+    let vk_binding_regex = Regex::new(
+        r"(?m)^\s*\[\[\s*vk::binding\s*\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\)\s*\]\]\s*([^;\n]+);",
+    )
+    .map_err(|e| BentoError::ShaderCompilation(format!("Invalid vk::binding regex: {e}")))?;
     let resource_regex = Regex::new(
         r"(?m)^\s*(?:RW?Texture\w+|RW?StructuredBuffer|StructuredBuffer|ConstantBuffer|ByteAddressBuffer|RaytracingAccelerationStructure|AccelerationStructure|Texture\w+|Sampler\w*)[^;\n]*?\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*?(?::\s*register\(\s*([tubcs]?)\s*(\d+)\s*\))?",
     )
@@ -850,6 +852,33 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
         order: usize,
         register_index: Option<u32>,
         register_type: RegisterType,
+    }
+
+    let mut explicit_bindings = Vec::new();
+    for (index, captures) in vk_binding_regex.captures_iter(source).enumerate() {
+        let binding = captures
+            .get(1)
+            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let set = captures
+            .get(2)
+            .and_then(|m| m.as_str().parse::<u32>().ok())
+            .unwrap_or(0);
+        let Some(declaration_match) = captures.get(3) else {
+            continue;
+        };
+        let declaration = declaration_match.as_str();
+        let name = extract_binding_name(declaration)
+            .unwrap_or_else(|| format!("binding_{set}_{index}"));
+        let Some(binding) = binding else {
+            continue;
+        };
+
+        explicit_bindings.push(SourceBinding {
+            set,
+            binding: Some(binding),
+            name,
+            order: index,
+        });
     }
 
     let mut parsed_bindings = Vec::new();
@@ -923,7 +952,10 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
 
     bindings.sort_by_key(|b| b.order);
 
-    Ok(bindings)
+    explicit_bindings.sort_by_key(|b| b.order);
+    explicit_bindings.extend(bindings);
+
+    Ok(explicit_bindings)
 }
 
 fn take_source_name(set: u32, binding: u32, sources: &mut Vec<SourceBinding>) -> Option<String> {
