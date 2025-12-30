@@ -13,6 +13,7 @@ pub struct SubpassInfo {
     pub depth_attachment: Option<ImageView>,
     pub clear_values: [Option<ClearValue>; 8],
     pub depth_clear: Option<ClearValue>,
+    pub sample_count: SampleCount,
 }
 
 pub struct RenderGraph {
@@ -189,6 +190,7 @@ impl RenderGraph {
                 let mut desc = AttachmentDescription::default();
                 // Keep load_op aligned with whether we intend to clear the attachment.
                 let clear = subpass.info.clear_values[colors.len()].is_some();
+                desc.samples = subpass.info.sample_count;
                 desc.load_op = if clear { LoadOp::Clear } else { LoadOp::Load };
                 colors.push(desc);
             }
@@ -196,6 +198,7 @@ impl RenderGraph {
             let depth_desc = subpass.info.depth_attachment.map(|_| {
                 let mut desc = AttachmentDescription::default();
                 desc.format = Format::D24S8;
+                desc.samples = subpass.info.sample_count;
                 desc.load_op = if subpass.info.depth_clear.is_some() {
                     LoadOp::Clear
                 } else {

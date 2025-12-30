@@ -37,6 +37,7 @@ fn headless_render_graph_executes_without_validation_noise() {
             None,
         ],
         depth_clear: None,
+        ..Default::default()
     };
 
     graph.add_subpass(&subpass, |stream| stream);
@@ -90,6 +91,7 @@ fn headless_render_graph_outputs_readable_image() {
                 None,
             ],
             depth_clear: None,
+            ..Default::default()
         },
         |stream| stream,
     );
@@ -182,6 +184,7 @@ fn render_graph_can_reuse_allocator() {
                 None,
             ],
             depth_clear: None,
+            ..Default::default()
         },
         |stream| stream,
     );

@@ -104,11 +104,12 @@ fn main() {
             ..Default::default()
         })
         .unwrap();
-    
+
     let pso = bento::builder::PSOBuilder::new()
         .vertex_compiled(Some(vert_shader))
         .fragment_compiled(Some(frag_shader))
-        .build(&mut context).unwrap();
+        .build(&mut context)
+        .unwrap();
 
     let mut display = context
         .make_display(&DisplayInfo {
@@ -152,6 +153,7 @@ fn main() {
             depth_attachment: None,
             clear_values: fill![Some(ClearValue::Color([0.0, 0.0, 0.0, 1.0])), None; None; 8],
             depth_clear: None,
+            ..Default::default()
         };
 
         {
