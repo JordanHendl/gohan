@@ -269,12 +269,12 @@ impl RenderGraph {
                             let mut subpass_stream = stream.begin_render_pass(begin);
                             subpass_stream = (subpass.cb)(subpass_stream);
                             stream = subpass_stream.stop_drawing();
-                            stream.end().append(cmd);
+                            stream.end().append(cmd).unwrap();
                         }
                         GraphPass::Compute(compute) => {
                             let stream = CommandStream::new().begin();
                             let stream = (compute.cb)(stream);
-                            stream.append(cmd);
+                            stream.append(cmd).unwrap();
                         }
                     }
                 }
