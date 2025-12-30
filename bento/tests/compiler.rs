@@ -117,6 +117,42 @@ fn compiles_slang_shader_with_debug_symbols() -> Result<(), BentoError> {
 }
 
 #[test]
+fn slang_variable_names_consistent_across_configs() -> Result<(), BentoError> {
+    let compiler = Compiler::new()?;
+    let path = "tests/fixtures/simple_compute.slang";
+
+    let baseline_request = sample_request(ShaderLang::Slang);
+    let baseline = compiler.compile_from_file(path, &baseline_request)?;
+    let baseline_names: Vec<String> =
+        baseline.variables.iter().map(|var| var.name.clone()).collect();
+
+    assert!(!baseline_names.is_empty());
+    assert!(baseline_names.iter().all(|name| !name.is_empty()));
+
+    for debug_symbols in [false, true] {
+        for optimization in [
+            OptimizationLevel::None,
+            OptimizationLevel::FileSize,
+            OptimizationLevel::Performance,
+        ] {
+            let mut request = sample_request(ShaderLang::Slang);
+            request.debug_symbols = debug_symbols;
+            request.optimization = optimization;
+
+            let result = compiler.compile_from_file(path, &request)?;
+            let names: Vec<String> =
+                result.variables.iter().map(|var| var.name.clone()).collect();
+
+            assert!(!names.is_empty());
+            assert!(names.iter().all(|name| !name.is_empty()));
+            assert_eq!(names, baseline_names);
+        }
+    }
+
+    Ok(())
+}
+
+#[test]
 fn returns_missing_file_error() {
     let compiler = Compiler::new().unwrap();
     let request = sample_request(ShaderLang::Glsl);
