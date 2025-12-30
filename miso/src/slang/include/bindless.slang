@@ -12,8 +12,8 @@ struct Material {
 };
 
 struct Camera {
-  float4x4 world_from_camera;
-  float4x4 projection;
+  column_major float4x4 world_from_camera;
+  column_major float4x4 projection;
   float2 viewport;
   float near;
   float far;
@@ -23,12 +23,12 @@ struct Camera {
 };
 
 struct Transformation {
-  float4x4 transform;
+  column_major float4x4 transform;
 };
 
 // Dynamic per-frame data.
 struct PerObjectInfo  {
-    float4x4 transform;          // Model matrix fallback.
+    column_major float4x4 transform;          // Model matrix fallback.
     Handle scene_id;
     Handle material_id;
     Handle camera_id;

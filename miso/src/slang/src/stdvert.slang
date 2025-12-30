@@ -43,13 +43,13 @@ VSOutput main(VSInput input)
     const float4x4 view = view_from_camera(camera);
     const float4x4 view_proj = mul(camera.projection, view);
     const float4x4 model = model_matrix();
-    const float4x4 mvp = mul(model, view_proj);
+    const float4x4 mvp = mul(view_proj, model);
 
-    const float4 world_pos = mul(float4(input.position, 1.0), model);
-    const float3 world_normal = normalize(mul(float4(input.normal, 0.0), model).xyz);
-    const float3 world_tangent = normalize(mul(float4(input.tangent.xyz, 0.0), model).xyz);
+    const float4 world_pos = mul(model, float4(input.position, 1.0));
+    const float3 world_normal = normalize(mul(model, float4(input.normal, 0.0)).xyz);
+    const float3 world_tangent = normalize(mul(model, float4(input.tangent.xyz, 0.0)).xyz);
 
-    output.position = mul(float4(input.position, 1.0), mvp);
+    output.position = mul(mvp, float4(input.position, 1.0));
     output.world_pos = world_pos.xyz;
     output.world_normal = world_normal;
     output.tex_coords = input.tex_coords;
@@ -58,4 +58,3 @@ VSOutput main(VSInput input)
 
     return output;
 }
-
