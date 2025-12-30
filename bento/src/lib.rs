@@ -395,8 +395,11 @@ impl Compiler {
         } else {
             spirv.clone()
         };
-        let reflected =
-            reflect_bindings(spirv_words_to_bytes(&reflection_spirv), source, resolved_lang)?;
+        let reflected = reflect_bindings(
+            spirv_words_to_bytes(&reflection_spirv),
+            source,
+            resolved_lang,
+        )?;
         let variables = reflected.variables;
         let rewritten_for_metadata = if request.debug_symbols {
             rewrite_spirv_binding_names(&spirv, &variables, &reflected.remap)
@@ -892,14 +895,14 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
     )
     .map_err(|e| BentoError::ShaderCompilation(format!("Invalid HLSL reflection regex: {e}")))?;
 
-    let cbuffer_regex = Regex::new(
-        r"(?m)^\s*(?:cbuffer|ConstantBuffer)\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*",
-    )
-    .map_err(|e| BentoError::ShaderCompilation(format!("Invalid constant buffer regex: {e}")))?;
-    let register_regex = Regex::new(
-        r"register\(\s*([tubcs])\s*(\d+)\s*(?:,\s*space\s*(\d+)\s*)?\)",
-    )
-    .map_err(|e| BentoError::ShaderCompilation(format!("Invalid register regex: {e}")))?;
+    let cbuffer_regex =
+        Regex::new(r"(?m)^\s*(?:cbuffer|ConstantBuffer)\s+([A-Za-z_][A-Za-z0-9_]*)[^;\n]*")
+            .map_err(|e| {
+                BentoError::ShaderCompilation(format!("Invalid constant buffer regex: {e}"))
+            })?;
+    let register_regex =
+        Regex::new(r"register\(\s*([tubcs])\s*(\d+)\s*(?:,\s*space\s*(\d+)\s*)?\)")
+            .map_err(|e| BentoError::ShaderCompilation(format!("Invalid register regex: {e}")))?;
 
     struct ParsedBinding {
         name: String,
@@ -910,9 +913,7 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
 
     let mut explicit_bindings = Vec::new();
     for (index, captures) in vk_binding_regex.captures_iter(source).enumerate() {
-        let binding = captures
-            .get(1)
-            .and_then(|m| m.as_str().parse::<u32>().ok());
+        let binding = captures.get(1).and_then(|m| m.as_str().parse::<u32>().ok());
         let set = captures
             .get(2)
             .and_then(|m| m.as_str().parse::<u32>().ok())
@@ -1010,15 +1011,6 @@ fn parse_hlsl_like_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoErr
             name: parsed.name,
             order: parsed.order,
         });
-
-        for (binding_index, parsed) in set_bindings.iter().enumerate() {
-            bindings.push(SourceBinding {
-                set: *set,
-                binding: Some(binding_index as u32),
-                name: parsed.name.clone(),
-                order: parsed.order,
-            });
-        }
     }
 
     bindings.sort_by_key(|b| b.order);
@@ -1606,3 +1598,4 @@ ConstantBuffer<SceneCamera> camera : register(b6);
         Ok(())
     }
 }
+
