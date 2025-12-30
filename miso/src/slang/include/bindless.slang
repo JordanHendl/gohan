@@ -1,4 +1,5 @@
 import handle;
+import miso;
 import lights;
 
 struct Material {
@@ -26,14 +27,6 @@ struct Transformation {
   column_major float4x4 transform;
 };
 
-// Dynamic per-frame data.
-struct PerObjectInfo  {
-    column_major float4x4 transform;          // Model matrix fallback.
-    Handle scene_id;
-    Handle material_id;
-    Handle camera_id;
-};
-
 // BINDLESS VARIABLES (match furikake's reserved bindless state)
 uniform Texture2D meshi_bindless_textures[] : register(t0, space0);
 uniform Texture2D meshi_bindless_samplers[] : register(s0, space0);
@@ -42,11 +35,6 @@ uniform StructuredBuffer<Camera> meshi_bindless_cameras : register(t2, space0);
 uniform StructuredBuffer<Transformation> meshi_bindless_transformations : register(t3, space0);
 uniform StructuredBuffer<Material> meshi_bindless_materials : register(t4, space0);
 uniform StructuredBuffer<Light> meshi_bindless_lights : register(t5, space0);
-
-// PER OBJECT INFO
-uniform StructuredBuffer<PerObjectInfo> per_obj_ssbo : register(t0, space1);
-
-static PerObjectInfo per_obj = per_obj_ssbo[0];
 
 // HELPERS
 float4 sample_texture(uint idx, float2 coords) {

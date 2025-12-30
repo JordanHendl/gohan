@@ -1,5 +1,6 @@
-import bindless;
 import miso;
+import bindless;
+import bindless_deferred_combine;
 
 struct FSInput
 {
@@ -11,19 +12,14 @@ struct FSOutput
     float4 color : SV_TARGET0;
 };
 
-cbuffer DeferredCombineInfoBuffer : register(b0, space2)
-{
-    DeferredCombineInfo deferred_combine_info;
-};
-
 [shader("fragment")]
 FSOutput main(FSInput input)
 {
     FSOutput output;
-    uint position_id = deferred_combine_info.position_texture_id;
-    uint albedo_id = deferred_combine_info.albedo_texture_id;
-    uint normal_id = deferred_combine_info.normal_texture_id;
-    uint material_id = deferred_combine_info.material_texture_id;
+    uint position_id = per_obj.position_texture_id;
+    uint albedo_id = per_obj.albedo_texture_id;
+    uint normal_id = per_obj.normal_texture_id;
+    uint material_id = per_obj.material_texture_id;
 
     float4 position =
         meshi_bindless_textures[position_id].Sample(meshi_bindless_samplers[position_id], input.tex_coords);

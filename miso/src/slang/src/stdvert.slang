@@ -1,4 +1,5 @@
 // Vertex Shader (vertex.slang)
+import bindless_draw;
 import bindless;
 import miso;
 

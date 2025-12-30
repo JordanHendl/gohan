@@ -176,6 +176,10 @@ impl TransientAllocator {
             bindless_image_ids: HashMap::new(),
         }
     }
+    
+    pub fn context(&self) -> &Context {
+        unsafe{self.ctx.as_ref()}
+    }
 
     pub fn new_with_bindless_registry(
         ctx: &mut Context,
