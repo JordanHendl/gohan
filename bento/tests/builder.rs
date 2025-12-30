@@ -1,7 +1,7 @@
 use bento::{
     BentoError, CompilationResult, Compiler, OptimizationLevel, PipelineBuildError, Request,
     ShaderLang,
-    builder::{ComputePipelineBuilder, GraphicsPipelineBuilder},
+    builder::{CSOBuilder, PSOBuilder},
 };
 use dashi::{
     BufferInfo, BufferUsage, BufferView, DebugMessageSeverity, DebugMessageType, DebugMessenger,
@@ -276,7 +276,7 @@ fn builds_simple_compute_pipeline_without_validation_errors() {
     let mut ctx = ValidationContext::headless(&ContextInfo::default()).expect("headless context");
     let compute_stage = compile_shader(dashi::ShaderType::Compute, SIMPLE_COMPUTE);
 
-    let pipeline = ComputePipelineBuilder::new()
+    let pipeline = CSOBuilder::new()
         .shader_compiled(Some(compute_stage))
         .build(&mut ctx);
 
@@ -299,7 +299,7 @@ fn builds_compute_pipeline_with_resources_and_table_updates() {
         })
         .expect("uniform buffer");
 
-    let mut pipeline = ComputePipelineBuilder::new()
+    let mut pipeline = CSOBuilder::new()
         .shader_compiled(Some(compute_stage))
         .add_variable("config", ShaderResource::Buffer(uniform.into()))
         .add_table_variable("data", 2)
@@ -359,7 +359,7 @@ fn compute_pipeline_fails_when_data_is_missing() {
         })
         .expect("uniform buffer");
 
-    let pipeline = ComputePipelineBuilder::new()
+    let pipeline = CSOBuilder::new()
         .shader_compiled(Some(compute_stage))
         .add_variable("config", ShaderResource::Buffer(uniform.into()))
         .build(&mut ctx);
@@ -433,7 +433,7 @@ fn builds_compute_pipeline_with_initial_table_resources() {
         .expect("replacement buffer"),
     );
 
-    let mut pipeline = ComputePipelineBuilder::new()
+    let mut pipeline = CSOBuilder::new()
         .shader_compiled(Some(compute_stage))
         .add_variable("config", ShaderResource::Buffer(uniform))
         .add_table_variable_with_resources("data", initial_resources)
@@ -482,7 +482,7 @@ fn compute_table_count_can_be_overridden_with_resources_length() {
         .expect("second override buffer"),
     );
 
-    let pipeline = ComputePipelineBuilder::new()
+    let pipeline = CSOBuilder::new()
         .shader_compiled(Some(compute_stage))
         .add_table_variable_with_resources(
             &data_name,
@@ -525,7 +525,7 @@ fn compute_table_rejects_out_of_range_slots() {
         .expect("invalid buffer"),
     );
 
-    let pipeline = ComputePipelineBuilder::new()
+    let pipeline = CSOBuilder::new()
         .shader_compiled(Some(compute_stage))
         .add_table_variable_with_resources(
             &data_name,
@@ -546,7 +546,7 @@ fn builds_graphics_pipeline_without_resources() {
     let vertex = compile_shader(dashi::ShaderType::Vertex, GRAPHICS_VERTEX_SIMPLE);
     let fragment = compile_shader(dashi::ShaderType::Fragment, GRAPHICS_FRAGMENT_SIMPLE);
 
-    let pipeline = GraphicsPipelineBuilder::new()
+    let pipeline = PSOBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
         .build(&mut ctx);
@@ -573,7 +573,7 @@ fn builds_graphics_pipeline_with_shared_uniform_bindings() {
         .expect("globals buffer"),
     );
 
-    let pipeline = GraphicsPipelineBuilder::new()
+    let pipeline = PSOBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
         .add_variable("globals", ShaderResource::Buffer(globals))
@@ -589,7 +589,7 @@ fn graphics_pipeline_fails_when_data_is_missing() {
     let vertex = compile_shader(dashi::ShaderType::Vertex, GRAPHICS_VERTEX_UNIFORM);
     let fragment = compile_shader(dashi::ShaderType::Fragment, GRAPHICS_FRAGMENT_UNIFORM);
 
-    let pipeline = GraphicsPipelineBuilder::new()
+    let pipeline = PSOBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
         .build(&mut ctx);
@@ -645,7 +645,7 @@ fn graphics_pipeline_tracks_multiple_sets() {
         .expect("data buffer"),
     );
 
-    let pipeline = GraphicsPipelineBuilder::new()
+    let pipeline = PSOBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
         .add_variable(&globals_name, ShaderResource::Buffer(globals))
@@ -706,7 +706,7 @@ fn graphics_table_count_can_be_overridden() {
         .expect("graphics third override buffer"),
     );
 
-    let pipeline = GraphicsPipelineBuilder::new()
+    let pipeline = PSOBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
         .add_table_variable_with_resources(
@@ -757,7 +757,7 @@ fn test_cull_shader_binding_mix() {
         })
         .expect("uniform buffer");
 
-    let mut cso = ComputePipelineBuilder::new()
+    let mut cso = CSOBuilder::new()
         .shader(Some(
             include_str!("fixtures/scene_cull.comp.glsl").as_bytes(),
         ))
@@ -827,7 +827,7 @@ fn graphics_table_rejects_out_of_range_slots() {
         .expect("graphics invalid buffer"),
     );
 
-    let pipeline = GraphicsPipelineBuilder::new()
+    let pipeline = PSOBuilder::new()
         .vertex_compiled(Some(vertex))
         .fragment_compiled(Some(fragment))
         .add_table_variable_with_resources(

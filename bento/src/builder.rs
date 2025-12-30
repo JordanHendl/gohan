@@ -385,14 +385,14 @@ pub enum BindTableVariable {
     WithResources { resources: Vec<IndexedResource> },
 }
 
-pub struct GraphicsPipelineBuilder {
+pub struct PSOBuilder {
     vertex: Option<CompilationResult>,
     fragment: Option<CompilationResult>,
     table_variables: HashMap<String, BindTableVariable>,
     details: GraphicsPipelineDetails,
 }
 
-impl GraphicsPipelineBuilder {
+impl PSOBuilder {
     pub fn new() -> Self {
         Self {
             vertex: None,
@@ -528,7 +528,7 @@ impl GraphicsPipelineBuilder {
     }
 
     pub fn build(self, ctx: &mut dashi::Context) -> Result<PSO, BentoError> {
-        let GraphicsPipelineBuilder {
+        let PSOBuilder {
             vertex,
             fragment,
             table_variables,
@@ -775,6 +775,7 @@ impl GraphicsPipelineBuilder {
                 .unwrap_or(dashi::VertexRate::Vertex),
         };
 
+        let sample_count = details.sample_count.clone();
         let layout = ctx
             .make_graphics_pipeline_layout(&GraphicsPipelineLayoutInfo {
                 debug_name: "bento_graphics_layout",
@@ -803,8 +804,8 @@ impl GraphicsPipelineBuilder {
                 }
             })
             .collect();
-
-        let samples = attachments.iter().map(|_| SampleCount::S1).collect();
+        
+        let samples = attachments.iter().map(|_| sample_count).collect();
 
         let pipeline = ctx
             .make_graphics_pipeline(&GraphicsPipelineInfo {
@@ -878,12 +879,12 @@ impl CSO {
         self.bind_table
     }
 }
-pub struct ComputePipelineBuilder {
+pub struct CSOBuilder {
     shader: Option<CompilationResult>,
     table_variables: HashMap<String, BindTableVariable>,
 }
 
-impl ComputePipelineBuilder {
+impl CSOBuilder {
     pub fn new() -> Self {
         Self {
             shader: None,
@@ -991,7 +992,7 @@ impl ComputePipelineBuilder {
 
     // Will fail if shaders are not given, or if variables given do not
     pub fn build(self, ctx: &mut dashi::Context) -> Result<CSO, BentoError> {
-        let ComputePipelineBuilder {
+        let CSOBuilder {
             shader,
             table_variables,
         } = self;

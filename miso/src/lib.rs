@@ -151,7 +151,7 @@ pub fn stddeferred_combine(defines: &[String]) -> Vec<CompilationResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bento::builder::GraphicsPipelineBuilder;
+    use bento::builder::PSOBuilder;
     use dashi::Context;
     use std::collections::{HashMap, HashSet};
 
@@ -298,7 +298,7 @@ mod tests {
         }
 
         let mut ctx = Context::headless(&dashi::ContextInfo::default()).expect("headless context");
-        let mut builder = GraphicsPipelineBuilder::new()
+        let mut builder = PSOBuilder::new()
             .vertex_compiled(Some(vertex))
             .fragment_compiled(Some(fragment));
         for (name, size) in table_sizes {

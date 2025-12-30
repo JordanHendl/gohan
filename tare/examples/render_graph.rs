@@ -105,7 +105,7 @@ fn main() {
         })
         .unwrap();
     
-    let pso = bento::builder::GraphicsPipelineBuilder::new()
+    let pso = bento::builder::PSOBuilder::new()
         .vertex_compiled(Some(vert_shader))
         .fragment_compiled(Some(frag_shader))
         .build(&mut context).unwrap();
