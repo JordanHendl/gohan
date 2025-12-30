@@ -112,6 +112,10 @@ fn compiles_slang_shader_with_debug_symbols() -> Result<(), BentoError> {
     assert!(!result.variables.is_empty());
     assert!(has_debug_instructions(&result.spirv));
     assert!(!binding_names_from_spirv(&result.spirv).is_empty());
+    
+    for var in result.variables.iter() {
+        assert!(!var.name.is_empty());
+    }
 
     Ok(())
 }

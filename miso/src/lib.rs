@@ -246,6 +246,7 @@ mod tests {
             .vertex_compiled(Some(vertex))
             .fragment_compiled(Some(fragment));
         for (name, size) in table_sizes {
+            assert!(!name.is_empty());
             builder = builder.add_table_variable(&name, size);
         }
 
