@@ -4,7 +4,7 @@ use cmd::{CommandStream, Executable, PendingGraphics, Recording};
 use dashi::{execution::CommandRing, *};
 use driver::command::BeginRenderPass;
 
-use crate::transient::TransientAllocator;
+use crate::transient::{BindlessTextureRegistry, TransientAllocator, TransientImage};
 
 #[derive(Default, Debug, Clone)]
 pub struct SubpassInfo {
@@ -71,6 +71,15 @@ impl RenderGraph {
         Self::with_transient_allocator(ctx, Some(allocator))
     }
 
+    pub fn new_with_bindless_registry(
+        ctx: &mut Context,
+        registry: &mut impl BindlessTextureRegistry,
+    ) -> Self {
+        let mut graph = Self::with_transient_allocator(ctx, None);
+        graph.set_bindless_registry(registry);
+        graph
+    }
+
     fn with_transient_allocator(
         ctx: &mut Context,
         allocator: Option<&mut TransientAllocator>,
@@ -102,13 +111,17 @@ impl RenderGraph {
     }
 
     // Make a transient image matching the parameters input.
-    pub fn make_image(&mut self, info: &ImageInfo) -> ImageView {
+    pub fn make_image(&mut self, info: &ImageInfo) -> TransientImage {
         self.alloc.as_mut().make_image(info)
     }
 
     // Make a transient buffer matching the parameters input
     pub fn make_buffer(&mut self, info: &BufferInfo) -> BufferView {
         self.alloc.as_mut().make_buffer(info)
+    }
+
+    pub fn set_bindless_registry(&mut self, registry: &mut impl BindlessTextureRegistry) {
+        self.alloc.as_mut().set_bindless_registry(registry);
     }
 
     // Append a potential subpass

@@ -104,6 +104,50 @@ pub fn stddeferred(defines: &[String]) -> Vec<CompilationResult> {
     vec![vertex, fragment]
 }
 
+pub fn stddeferred_combine(defines: &[String]) -> Vec<CompilationResult> {
+    let vshader = resolve_with_includes!(
+        "src/slang/src/stddeferred_combine_vert.slang",
+        "-Isrc/slang/include/"
+    );
+    let fshader = resolve_with_includes!(
+        "src/slang/src/stddeferred_combine_frag.slang",
+        "-Isrc/slang/include/"
+    );
+    let define_map = build_define_map(defines);
+
+    let compiler = Compiler::new().expect("Failed to create shader compiler");
+    let base_request = Request {
+        name: None,
+        lang: ShaderLang::Slang,
+        stage: dashi::ShaderType::Vertex,
+        optimization: OptimizationLevel::Performance,
+        debug_symbols: true,
+        defines: define_map,
+    };
+
+    let vertex = compiler
+        .compile(
+            vshader.as_bytes(),
+            &Request {
+                stage: dashi::ShaderType::Vertex,
+                ..base_request.clone()
+            },
+        )
+        .expect("Failed to compile std deferred combine vertex shader");
+
+    let fragment = compiler
+        .compile(
+            fshader.as_bytes(),
+            &Request {
+                stage: dashi::ShaderType::Fragment,
+                ..base_request
+            },
+        )
+        .expect("Failed to compile std deferred combine fragment shader");
+
+    vec![vertex, fragment]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -133,6 +177,18 @@ mod tests {
     #[test]
     fn stddeferred_compiles_vertex_and_fragment_shaders() {
         let results = stddeferred(&[]);
+
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().any(|r| r.stage == dashi::ShaderType::Vertex));
+        assert!(results
+            .iter()
+            .any(|r| r.stage == dashi::ShaderType::Fragment));
+        assert!(results.iter().all(|r| !r.spirv.is_empty()));
+    }
+
+    #[test]
+    fn stddeferred_combine_compiles_vertex_and_fragment_shaders() {
+        let results = stddeferred_combine(&[]);
 
         assert_eq!(results.len(), 2);
         assert!(results.iter().any(|r| r.stage == dashi::ShaderType::Vertex));

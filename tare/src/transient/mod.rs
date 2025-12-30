@@ -12,6 +12,34 @@ pub struct Ring<T, const N: usize> {
     data: [T; N],
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TransientImage {
+    pub view: ImageView,
+    pub bindless_id: Option<u16>,
+}
+
+pub trait BindlessTextureRegistry {
+    fn add_texture(&mut self, view: ImageView) -> u16;
+    fn remove_texture(&mut self, id: u16);
+}
+
+#[derive(Clone, Copy)]
+struct BindlessRegistry {
+    ctx: *mut (),
+    add: unsafe fn(*mut (), ImageView) -> u16,
+    remove: unsafe fn(*mut (), u16),
+}
+
+unsafe fn add_texture_impl<T: BindlessTextureRegistry>(ctx: *mut (), view: ImageView) -> u16 {
+    let registry = unsafe { &mut *(ctx as *mut T) };
+    registry.add_texture(view)
+}
+
+unsafe fn remove_texture_impl<T: BindlessTextureRegistry>(ctx: *mut (), id: u16) {
+    let registry = unsafe { &mut *(ctx as *mut T) };
+    registry.remove_texture(id);
+}
+
 impl<T: Default, const N: usize> Ring<T, N> {
     pub fn new() -> Self {
         Self {
@@ -124,6 +152,8 @@ pub struct TransientAllocator {
     free_buffers: Vec<Handle<Buffer>>,
     free_renderpasses: Vec<Handle<RenderPass>>,
     free_semaphores: Vec<Handle<Semaphore>>,
+    bindless_registry: Option<BindlessRegistry>,
+    bindless_image_ids: HashMap<Handle<Image>, u16>,
 }
 
 impl TransientAllocator {
@@ -142,7 +172,52 @@ impl TransientAllocator {
             free_buffers: Vec::new(),
             free_renderpasses: Vec::new(),
             free_semaphores: Vec::new(),
+            bindless_registry: None,
+            bindless_image_ids: HashMap::new(),
         }
+    }
+
+    pub fn new_with_bindless_registry(
+        ctx: &mut Context,
+        registry: &mut impl BindlessTextureRegistry,
+    ) -> Self {
+        let mut allocator = Self::new(ctx);
+        allocator.set_bindless_registry(registry);
+        allocator
+    }
+
+    pub fn set_bindless_registry<T: BindlessTextureRegistry>(&mut self, registry: &mut T) {
+        self.bindless_registry = Some(BindlessRegistry {
+            ctx: registry as *mut T as *mut (),
+            add: add_texture_impl::<T>,
+            remove: remove_texture_impl::<T>,
+        });
+    }
+
+    fn register_bindless_texture(&mut self, handle: Handle<Image>) -> Option<u16> {
+        let registry = self.bindless_registry?;
+        if let Some(existing) = self.bindless_image_ids.get(&handle) {
+            return Some(*existing);
+        }
+
+        let view = ImageView {
+            img: handle,
+            ..Default::default()
+        };
+        let id = unsafe { (registry.add)(registry.ctx, view) };
+
+        self.bindless_image_ids.insert(handle, id);
+        Some(id)
+    }
+
+    fn unregister_bindless_texture(&mut self, handle: Handle<Image>) {
+        let Some(registry) = self.bindless_registry else {
+            return;
+        };
+        let Some(id) = self.bindless_image_ids.remove(&handle) else {
+            return;
+        };
+        unsafe { (registry.remove)(registry.ctx, id) };
     }
 
     // Helper function to check for stale data and remove it.
@@ -245,7 +320,9 @@ impl TransientAllocator {
     pub fn advance(&mut self) {
         let ctx = unsafe { self.ctx.as_mut() };
 
-        for handle in self.free_images.drain(..) {
+        let handles: Vec<_> = self.free_images.drain(..).collect();
+        for handle in handles {
+            self.unregister_bindless_texture(handle);
             ctx.destroy_image(handle);
         }
         for handle in self.free_buffers.drain(..) {
@@ -267,7 +344,7 @@ impl TransientAllocator {
     }
 
     // Make a transient image matching the parameters input from this frame.
-    pub fn make_image(&mut self, info: &ImageInfo) -> ImageView {
+    pub fn make_image(&mut self, info: &ImageInfo) -> TransientImage {
         let key = ImageKey::from(info);
         let in_use: HashSet<Handle<Image>> = self
             .images
@@ -291,10 +368,13 @@ impl TransientAllocator {
 
         self.images.data_mut().push((key, handle));
 
-        ImageView {
+        let view = ImageView {
             img: handle,
             ..Default::default()
-        }
+        };
+        let bindless_id = self.register_bindless_texture(handle);
+
+        TransientImage { view, bindless_id }
     }
 
     // Make a transient buffer matching the parameters input
@@ -407,8 +487,12 @@ impl Drop for TransientAllocator {
 
         let ctx = unsafe { self.ctx.as_mut() };
 
+        let mut handles = Vec::new();
         for (_, img) in self.images.data.iter_mut().flatten() {
-            let handle = *img;
+            handles.push(*img);
+        }
+        for handle in handles {
+            self.unregister_bindless_texture(handle);
             ctx.destroy_image(handle);
         }
 
@@ -427,10 +511,15 @@ impl Drop for TransientAllocator {
             ctx.destroy_semaphore(handle);
         }
 
+        let mut handles = Vec::new();
         for imgs in self.available_images.drain() {
             for entry in imgs.1 {
-                ctx.destroy_image(entry.handle);
+                handles.push(entry.handle);
             }
+        }
+        for handle in handles {
+            self.unregister_bindless_texture(handle);
+            ctx.destroy_image(handle);
         }
 
         for bufs in self.available_buffers.drain() {
@@ -449,7 +538,9 @@ impl Drop for TransientAllocator {
             ctx.destroy_semaphore(sem.handle);
         }
 
-        for handle in self.free_images.drain(..) {
+        let handles: Vec<_> = self.free_images.drain(..).collect();
+        for handle in handles {
+            self.unregister_bindless_texture(handle);
             ctx.destroy_image(handle);
         }
 
