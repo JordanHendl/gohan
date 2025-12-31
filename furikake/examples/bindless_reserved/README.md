@@ -6,6 +6,7 @@ This example exercises every reserved item exposed by the **bindless**
 - `meshi_timing` (uniform)
 - `meshi_bindless_camera`
 - `meshi_bindless_textures`
+- `meshi_bindless_samplers`
 - `meshi_bindless_transformations`
 - `meshi_bindless_materials`
 
@@ -22,7 +23,7 @@ cargo run --example bindless_reserved
 
 ## What it shows
 
-- Resolver validation across all five reserved resources.
+- Resolver validation across all six reserved resources.
 - How to allocate, edit, and inspect bindless handles for cameras, textures,
   transformations, and materials.
 - Automatic layout generation for a mixed bindful/bindless shader set via the

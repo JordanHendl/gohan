@@ -362,7 +362,7 @@ impl Compiler {
             request.lang
         };
 
-        options.set_auto_combined_image_sampler(true);
+        options.set_auto_combined_image_sampler(false);
         options.set_source_language(source_language(resolved_lang)?);
         options.set_target_env(TargetEnv::Vulkan, EnvVersion::Vulkan1_2 as u32);
         options.set_target_spirv(SpirvVersion::V1_3);
@@ -617,7 +617,8 @@ fn reflect_bindings(
                 DescriptorType::STORAGE_BUFFER_DYNAMIC => {
                     dashi::BindTableVariableType::DynamicStorage
                 }
-                DescriptorType::SAMPLED_IMAGE => dashi::BindTableVariableType::SampledImage,
+                DescriptorType::SAMPLED_IMAGE => dashi::BindTableVariableType::Image,
+                DescriptorType::SAMPLER => dashi::BindTableVariableType::Sampler,
                 DescriptorType::STORAGE_IMAGE => dashi::BindTableVariableType::StorageImage,
                 DescriptorType::COMBINED_IMAGE_SAMPLER => {
                     dashi::BindTableVariableType::SampledImage
@@ -1598,4 +1599,3 @@ ConstantBuffer<SceneCamera> camera : register(b6);
         Ok(())
     }
 }
-

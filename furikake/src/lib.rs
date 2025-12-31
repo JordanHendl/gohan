@@ -189,15 +189,16 @@ impl DefaultState {
 ///////////////////////////////////////////////////////////
 ///
 
-const BINDLESS_STATE_NAMES: [&str; 6] = [
+const BINDLESS_STATE_NAMES: [&str; 7] = [
     "meshi_timing",
     "meshi_bindless_cameras",
     "meshi_bindless_textures",
+    "meshi_bindless_samplers",
     "meshi_bindless_transformations",
     "meshi_bindless_materials",
     "meshi_bindless_lights",
 ];
-const BINDLESS_METADATA: [ReservedMetadata; 6] = [
+const BINDLESS_METADATA: [ReservedMetadata; 7] = [
     ReservedMetadata {
         name: "meshi_timing",
         kind: BindTableVariableType::Uniform,
@@ -208,7 +209,11 @@ const BINDLESS_METADATA: [ReservedMetadata; 6] = [
     },
     ReservedMetadata {
         name: "meshi_bindless_textures",
-        kind: BindTableVariableType::SampledImage,
+        kind: BindTableVariableType::Image,
+    },
+    ReservedMetadata {
+        name: "meshi_bindless_samplers",
+        kind: BindTableVariableType::Sampler,
     },
     ReservedMetadata {
         name: "meshi_bindless_transformations",
@@ -248,20 +253,20 @@ impl BindlessState {
             names[1].to_string(),
             Box::new(ReservedBindlessCamera::new(ctx)),
         );
+        let textures = ReservedBindlessTextures::new(ctx);
+        let samplers = textures.samplers();
+        reserved.insert(names[2].to_string(), Box::new(textures));
+        reserved.insert(names[3].to_string(), Box::new(samplers));
         reserved.insert(
-            names[2].to_string(),
-            Box::new(ReservedBindlessTextures::new(ctx)),
-        );
-        reserved.insert(
-            names[3].to_string(),
+            names[4].to_string(),
             Box::new(ReservedBindlessTransformations::new(ctx)),
         );
         reserved.insert(
-            names[4].to_string(),
+            names[5].to_string(),
             Box::new(ReservedBindlessMaterials::new(ctx)),
         );
         reserved.insert(
-            names[5].to_string(),
+            names[6].to_string(),
             Box::new(ReservedBindlessLights::new(ctx)),
         );
 
