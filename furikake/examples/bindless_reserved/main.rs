@@ -64,7 +64,8 @@ fn compile_shader() -> bento::CompilationResult {
             uint height;
             uint mip_levels;
         };
-        layout(set = 2, binding = 0) uniform Sampler2D meshi_bindless_textures[]; 
+        layout(set = 2, binding = 0) uniform texture2D meshi_bindless_textures[];
+        layout(set = 2, binding = 1) uniform sampler meshi_bindless_samplers[];
 
         layout(set = 3, binding = 0) buffer Transformations {
             mat4 transforms[];
@@ -85,11 +86,13 @@ fn compile_shader() -> bento::CompilationResult {
         void main() {
             float time_mix = meshi_timing.frame_time_ms * 0.001;
             vec3 camera_dir = normalize(-meshi_bindless_camera.cameras[0].world_from_camera[2].xyz);
-            uint texture_id = meshi_bindless_textures.textures[0].id;
+            sampler2D bindless_sampler =
+                sampler2D(meshi_bindless_textures[0], meshi_bindless_samplers[0]);
+            vec4 texture_sample = texture(bindless_sampler, vec2(0.5));
             mat4 model = meshi_bindless_transformations.transforms[0];
             uint material_tex = meshi_bindless_materials.materials[0].base_color_texture_id;
 
-            if (time_mix + camera_dir.x + float(texture_id + material_tex) + model[0][0] > -1.0) {
+            if (time_mix + camera_dir.x + texture_sample.x + float(material_tex) + model[0][0] > -1.0) {
                 // reference everything so the compiler keeps all reserved bindings
             }
         }

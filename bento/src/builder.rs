@@ -35,6 +35,8 @@ fn resource_var_type(resource: &ShaderResource) -> BindTableVariableType {
         ShaderResource::DynamicStorage(_) => BindTableVariableType::DynamicStorage,
         ShaderResource::StorageBuffer(_) => BindTableVariableType::Storage,
         ShaderResource::SampledImage(_, _) => BindTableVariableType::SampledImage,
+        ShaderResource::Image(_) => BindTableVariableType::Image,
+        ShaderResource::Sampler(_) => BindTableVariableType::Sampler,
     }
 }
 
@@ -96,6 +98,8 @@ struct DefaultResources {
     uniform: Option<ShaderResource>,
     storage: Option<ShaderResource>,
     sampled_image: Option<ShaderResource>,
+    image: Option<ShaderResource>,
+    sampler: Option<ShaderResource>,
     storage_image: Option<ShaderResource>,
 }
 
@@ -105,6 +109,8 @@ impl Default for DefaultResources {
             uniform: None,
             storage: None,
             sampled_image: None,
+            image: None,
+            sampler: None,
             storage_image: None,
         }
     }
@@ -190,6 +196,48 @@ impl DefaultResources {
         Ok(ShaderResource::SampledImage(view, sampler))
     }
 
+    fn make_image(ctx: &mut dashi::Context, name: &str) -> Result<ShaderResource, PipelineBuildError> {
+        const BLACK_PIXEL: [u8; 4] = [0, 0, 0, 0];
+
+        let image = ctx
+            .make_image(&ImageInfo {
+                debug_name: "bento_default_image",
+                dim: [1, 1, 1],
+                layers: 1,
+                format: Format::RGBA8,
+                mip_levels: 1,
+                samples: SampleCount::S1,
+                initial_data: Some(&BLACK_PIXEL),
+            })
+            .map_err(|source| PipelineBuildError::DefaultResourceCreateFailed {
+                name: name.to_string(),
+                resource_type: "image",
+                source,
+            })?;
+
+        let view = ImageView {
+            img: image,
+            ..Default::default()
+        };
+
+        Ok(ShaderResource::Image(view))
+    }
+
+    fn make_sampler(
+        ctx: &mut dashi::Context,
+        name: &str,
+    ) -> Result<ShaderResource, PipelineBuildError> {
+        let sampler = ctx
+            .make_sampler(&SamplerInfo::default())
+            .map_err(|source| PipelineBuildError::DefaultResourceCreateFailed {
+                name: name.to_string(),
+                resource_type: "sampler",
+                source,
+            })?;
+
+        Ok(ShaderResource::Sampler(sampler))
+    }
+
     fn get(
         &mut self,
         ctx: &mut dashi::Context,
@@ -217,6 +265,20 @@ impl DefaultResources {
                 }
 
                 Ok(self.sampled_image.clone().expect("sampled image default"))
+            }
+            BindTableVariableType::Image => {
+                if self.image.is_none() {
+                    self.image = Some(Self::make_image(ctx, name)?);
+                }
+
+                Ok(self.image.clone().expect("image default"))
+            }
+            BindTableVariableType::Sampler => {
+                if self.sampler.is_none() {
+                    self.sampler = Some(Self::make_sampler(ctx, name)?);
+                }
+
+                Ok(self.sampler.clone().expect("sampler default"))
             }
             BindTableVariableType::StorageImage => {
                 if self.storage_image.is_none() {

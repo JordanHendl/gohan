@@ -229,8 +229,9 @@ mod tests {
             .iter()
             .map(|v| (v.set, v.kind.var_type))
             .collect();
-        assert_eq!(fragment_sets.len(), 3);
-        assert!(fragment_sets.contains(&(0, dashi::BindTableVariableType::SampledImage)));
+        assert_eq!(fragment_sets.len(), 4);
+        assert!(fragment_sets.contains(&(0, dashi::BindTableVariableType::Image)));
+        assert!(fragment_sets.contains(&(0, dashi::BindTableVariableType::Sampler)));
         assert!(fragment_sets.contains(&(0, dashi::BindTableVariableType::Storage)));
         assert!(fragment_sets.contains(&(1, dashi::BindTableVariableType::Storage)));
     }

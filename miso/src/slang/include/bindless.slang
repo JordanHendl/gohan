@@ -29,7 +29,7 @@ struct Transformation {
 
 // BINDLESS VARIABLES (match furikake's reserved bindless state)
 uniform Texture2D meshi_bindless_textures[] : register(t0, space0);
-uniform Texture2D meshi_bindless_samplers[] : register(s0, space0);
+uniform SamplerState meshi_bindless_samplers[] : register(s1, space0);
 
 uniform StructuredBuffer<Camera> meshi_bindless_cameras : register(t2, space0);
 uniform StructuredBuffer<Transformation> meshi_bindless_transformations : register(t3, space0);
