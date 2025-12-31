@@ -49,6 +49,8 @@ struct FSOutput {
     output.color = float4(albedo.rgb * float3(shade), 1.0);
   }
   
-  output.color = float4(albedo.rgb, 1.0);
+  if (albedo.r > 0.0) {
+    output.color = float4(1.0);
+  }
   return output;
 }
