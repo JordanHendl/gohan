@@ -1,5 +1,5 @@
 use bento::{InterfaceVariable, ShaderVariable, VertexLayout};
-use miso::stddeferred;
+use miso::{stddeferred, stddeferred_combine};
 
 fn print_interface(label: &str, variables: &[InterfaceVariable]) {
     println!("{label}:");
@@ -45,7 +45,7 @@ fn print_vertex_layout(layout: &VertexLayout) {
     }
 }
 
-fn main() {
+pub fn print_stddeferred() {
     let defines: Vec<String> = std::env::args().skip(1).collect();
     let shaders = stddeferred(&defines);
 
@@ -77,4 +77,43 @@ fn main() {
 
         println!();
     }
+}
+
+pub fn print_stddeferred_combine() {
+    let defines: Vec<String> = std::env::args().skip(1).collect();
+    let shaders = stddeferred_combine(&defines);
+
+    println!(
+        "Compiled {} shader(s) via miso::stddeferred with defines: {:?}\n",
+        shaders.len(),
+        defines
+    );
+
+    for shader in shaders {
+        println!("==============================");
+        println!("Stage: {:?}", shader.stage);
+        println!("Language: {:?}", shader.lang);
+        println!("Name: {:?}", shader.name);
+        println!("Source file: {:?}", shader.file);
+        println!("Entry points: {:?}", shader.metadata.entry_points);
+
+        if let Some(size) = shader.metadata.workgroup_size {
+            println!("Workgroup size: {:?}", size);
+        }
+
+        print_interface("Inputs", &shader.metadata.inputs);
+        print_interface("Outputs", &shader.metadata.outputs);
+        print_bindings(&shader.variables);
+
+        if let Some(vertex) = &shader.metadata.vertex {
+            print_vertex_layout(vertex);
+        }
+
+        println!();
+    }
+}
+
+fn main() {
+    print_stddeferred();
+    print_stddeferred_combine();
 }

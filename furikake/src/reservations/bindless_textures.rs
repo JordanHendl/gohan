@@ -3,7 +3,7 @@
 use std::ptr::NonNull;
 
 use dashi::{
-    cmd::Executable, CommandStream, Context, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, Sampler, SamplerInfo, ShaderResource
+    cmd::Executable, BindTable, BindTableUpdateInfo, CommandStream, Context, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource, Sampler, SamplerInfo, ShaderResource
 };
 
 use crate::{error::FurikakeError, types::Texture};
@@ -93,7 +93,7 @@ impl ReservedBindlessTextures {
             }
         }
     }
-
+    
     pub fn remove_texture(&mut self, texture: u16) {
         if let Some(slot) = self.host_texture_data.get_mut(texture as usize) {
             slot.img = self.def.img;

@@ -203,9 +203,14 @@ impl TransientAllocator {
         if let Some(existing) = self.bindless_image_ids.get(&handle) {
             return Some(*existing);
         }
-
+        
+        let aspect = match unsafe{self.ctx.as_ref()}.image_info(handle).format {
+            Format::D24S8 => AspectMask::Depth,
+            _ => AspectMask::Color,
+        };
         let view = ImageView {
             img: handle,
+            aspect,
             ..Default::default()
         };
         let id = unsafe { (registry.add)(registry.ctx, view) };
