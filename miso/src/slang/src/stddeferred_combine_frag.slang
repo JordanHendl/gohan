@@ -42,6 +42,13 @@ FSOutput main(FSInput input)
         lighting = albedo.rgb * dir_light.color.rgb * dir_light.intensity * ndotl * material_scale;
     }
 
-    output.color = float4(lighting, 1.0);
+    if (material_id != 1.0) {
+      output.color = float4(lighting, 1.0);
+    } else {
+      // Choose a bias direction (Y = up is common)
+      float shade = normal.y * 0.5 + 0.5; // remap [-1,1] → [0,1]
+      output.color = float4(albedo.rgb * float3(shade), 1.0);
+    }
+
     return output;
 }
