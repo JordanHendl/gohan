@@ -229,12 +229,14 @@ impl RenderGraph {
                 color_attachments: [None; 4],
                 depth_attachment: subpass.info.depth_attachment,
                 clear_values: [None; 4],
+                depth_clear: subpass.info.depth_clear,
             };
 
             for i in 0..4 {
                 begin.color_attachments[i] = subpass.info.color_attachments[i];
                 begin.clear_values[i] = subpass.info.clear_values[i];
             }
+
 
             self.cached_render_passes.push(render_pass);
             self.cached_begins.push(begin);
