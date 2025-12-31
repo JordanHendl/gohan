@@ -40,9 +40,6 @@ struct FSOutput {
     float shade = max(normal.y * 0.5 + 0.5, 0.2); // remap [-1,1] → [0,1]
     output.color = float4(albedo.rgb * float3(shade), 1.0);
   }
-  
-  if (albedo.r > 0.0) {
-    output.color = float4(1.0);
-  }
+
   return output;
 }
