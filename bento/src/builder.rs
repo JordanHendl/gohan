@@ -385,9 +385,15 @@ pub enum BindTableVariable {
     WithResources { resources: Vec<IndexedResource> },
 }
 
+pub struct AttachmentDesc {
+    pub samples: SampleCount,
+    pub format: Format,
+}
+
 pub struct PSOBuilder {
     vertex: Option<CompilationResult>,
     fragment: Option<CompilationResult>,
+    depth: Option<AttachmentDesc>,
     table_variables: HashMap<String, BindTableVariable>,
     attachment_formats: HashMap<String, Format>,
     details: GraphicsPipelineDetails,
@@ -401,6 +407,7 @@ impl PSOBuilder {
             table_variables: HashMap::new(),
             attachment_formats: HashMap::new(),
             details: GraphicsPipelineDetails::default(),
+            depth: None,
         }
     }
 
@@ -483,6 +490,12 @@ impl PSOBuilder {
         self
     }
 
+    pub fn add_depth_target(self, info: AttachmentDesc) -> Self {
+        return Self {
+            depth: Some(info),
+            ..self
+        };
+    }
     // Adds a variable to this builder. The variable name is used to match the binding up with the
     // shader source bindings.
     pub fn add_table_variable(self, key: &str, size: u32) -> Self {
@@ -546,6 +559,7 @@ impl PSOBuilder {
             table_variables,
             attachment_formats,
             details,
+            depth,
         } = self;
 
         let vertex = vertex.ok_or(PipelineBuildError::MissingShader { stage: "vertex" })?;
@@ -821,17 +835,27 @@ impl PSOBuilder {
                 }
             })
             .collect();
-        
+
         let samples = attachments.iter().map(|_| sample_count).collect();
+        
+        let depth_format = match depth.as_ref() {
+            Some(d) => Some(d.format),
+            None => None,
+        };
+
+        let depth_sample = match depth.as_ref() {
+            Some(d) => Some(d.samples),
+            None => None,
+        };
 
         let pipeline = ctx
             .make_graphics_pipeline(&GraphicsPipelineInfo {
                 layout,
                 attachment_formats: attachments,
-                depth_format: None,
+                depth_format,
                 subpass_samples: dashi::SubpassSampleInfo {
                     color_samples: samples,
-                    depth_sample: Default::default(),
+                    depth_sample,
                 },
                 subpass_id: 0,
                 debug_name: "bento_graphics_pipeline",

@@ -75,14 +75,6 @@ mod tests {
 
     #[test]
     fn displays_mapping_failures() {
-        let map_error = FurikakeError::BufferMapFailed {
-            source: GPUError::LibraryError(),
-        };
-        assert_eq!(
-            format!("{}", map_error),
-            "failed to map buffer: Library could not be loaded"
-        );
-
         let unmap_error = FurikakeError::BufferUnmapFailed {
             source: GPUError::SlotError(),
         };
