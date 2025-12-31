@@ -246,6 +246,17 @@ pub struct Light {
     pub extra: Vec4,
 }
 
+impl Default for Light {
+    fn default() -> Self {
+        Self {
+            position_type: Vec4::new(-1.0, -1.0, -1.0, -1.0),
+            direction_range: Default::default(),
+            color_intensity: Default::default(),
+            spot_area: Default::default(),
+            extra: Default::default(),
+        }
+    }
+}
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Material {

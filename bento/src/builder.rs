@@ -395,7 +395,7 @@ pub struct PSOBuilder {
     fragment: Option<CompilationResult>,
     depth: Option<AttachmentDesc>,
     table_variables: HashMap<String, BindTableVariable>,
-    attachment_formats: HashMap<String, Format>,
+    attachment_formats: HashMap<u32, Format>,
     details: GraphicsPipelineDetails,
 }
 
@@ -542,9 +542,9 @@ impl PSOBuilder {
         Self { details, ..self }
     }
 
-    pub fn set_attachment_format(self, name: &str, format: Format) -> Self {
+    pub fn set_attachment_format(self, slot: u32, format: Format) -> Self {
         let mut attachment_formats = self.attachment_formats;
-        attachment_formats.insert(name.to_string(), format);
+        attachment_formats.insert(slot, format);
 
         Self {
             attachment_formats,
@@ -816,15 +816,17 @@ impl PSOBuilder {
                 source,
             })?;
 
+        let mut idx = 0;
         let attachments: Vec<Format> = fragment
             .metadata
             .outputs
             .iter()
             .map(|iv| {
-                if let Some(format) = attachment_formats.get(&iv.name).copied() {
+                if let Some(format) = attachment_formats.get(&idx).copied() {
                     return format;
                 }
 
+                idx += 1;
                 let fmt = iv.format.unwrap_or(ShaderPrimitiveType::Vec4);
                 match fmt {
                     ShaderPrimitiveType::Vec2 => Format::RGB8,
@@ -837,7 +839,7 @@ impl PSOBuilder {
             .collect();
 
         let samples = attachments.iter().map(|_| sample_count).collect();
-        
+
         let depth_format = match depth.as_ref() {
             Some(d) => Some(d.format),
             None => None,

@@ -22,6 +22,7 @@ impl ReservedBindlessLights {
         const START_SIZE: usize = 1024;
 
         let available: Vec<u16> = (0..START_SIZE as u16).collect();
+        let start = vec![Light::default(); START_SIZE];
         let data = StagedBuffer::new(
             ctx,
             BufferInfo {
@@ -29,7 +30,7 @@ impl ReservedBindlessLights {
                 byte_size: std::mem::size_of::<Light>() as u32 * START_SIZE as u32,
                 visibility: Default::default(),
                 usage: BufferUsage::ALL,
-                initial_data: None,
+                initial_data: unsafe{Some(start.as_slice().align_to::<u8>().1)},
             },
         );
 
