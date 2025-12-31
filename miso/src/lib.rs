@@ -78,7 +78,7 @@ pub fn stddeferred(defines: &[String]) -> Vec<CompilationResult> {
 
     let compiler = Compiler::new().expect("Failed to create shader compiler");
     let base_request = Request {
-        name: None,
+        name: Some("stddeferred".to_string()),
         lang: ShaderLang::Slang,
         stage: dashi::ShaderType::Vertex,
         optimization: OptimizationLevel::Performance,
@@ -122,7 +122,7 @@ pub fn stddeferred_combine(defines: &[String]) -> Vec<CompilationResult> {
 
     let compiler = Compiler::new().expect("Failed to create shader compiler");
     let base_request = Request {
-        name: None,
+        name: Some("stddeferred_combine".to_string()),
         lang: ShaderLang::Slang,
         stage: dashi::ShaderType::Vertex,
         optimization: OptimizationLevel::Performance,
