@@ -1,8 +1,8 @@
 import miso;
-import bindless;
 import bindless_deferred_combine;
 
 struct FSInput {
+  float4 svpos : SV_Position;
   float2 tex_coords : TEXCOORD0;
 };
 
@@ -17,18 +17,10 @@ struct FSOutput {
   uint normal_id = per_obj.normal_texture_id;
   uint material_id = per_obj.material_texture_id;
 
-  float4 position = meshi_bindless_textures[position_id].Sample(
-      meshi_bindless_samplers[position_id], input.tex_coords);
-  float4 albedo = meshi_bindless_textures[albedo_id].Sample(
-      meshi_bindless_samplers[albedo_id], input.tex_coords);
-  float3 normal = normalize(
-      meshi_bindless_textures[normal_id]
-          .Sample(meshi_bindless_samplers[normal_id], input.tex_coords)
-          .xyz);
-  float material_code =
-      meshi_bindless_textures[material_id]
-          .Sample(meshi_bindless_samplers[material_id], input.tex_coords)
-          .x;
+  float4 position = sample_texture(position_id, int2(input.svpos.xy));
+  float4 albedo = sample_texture(albedo_id, int2(input.svpos.xy));
+  float4 normal = sample_texture(normal_id, int2(input.svpos.xy));
+  float4 material_code = sample_texture(material_id, int2(input.svpos.xy));
 
   float depth_factor = saturate(1.0 / (1.0 + length(position.xyz)));
   float material_scale = 1.0 + (material_code * 0.001);
