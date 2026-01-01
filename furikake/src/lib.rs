@@ -9,6 +9,8 @@ use dashi::{
     cmd::Executable, BindTableVariableType, BindTableUpdateInfo, CommandStream, Context,
     ImageView, IndexedBindingInfo, IndexedResource,
 };
+use dashi::Handle;
+
 use error::FurikakeError;
 use reservations::{
     bindless_animations::ReservedBindlessAnimations, bindless_camera::ReservedBindlessCamera,
@@ -19,6 +21,10 @@ use reservations::{
 };
 use std::{collections::HashMap, ptr::NonNull};
 use tare::transient::BindlessTextureRegistry;
+use types::{
+    AnimationClip, AnimationKeyframe, AnimationState, AnimationTrack, JointTransform,
+    SkeletonHeader,
+};
 
 pub use resolver::*;
 
@@ -65,6 +71,29 @@ impl PSOBuilderFurikakeExt for CSOBuilder {
         let reservations::ReservedBinding::TableBinding { resources, .. } = reserved;
         Ok(self.add_table_variable_with_resources(key, resources))
     }
+}
+
+/// Registry for bindless animation data stored in reserved GPU buffers.
+///
+/// # Expected usage
+/// - Register animation/skeleton assets once at load time and keep the returned `Handle<T>` IDs.
+/// - Store these IDs in your database/asset layer and pass them into per-draw state (e.g. animation
+///   state buffers or push constants).
+/// - Avoid per-frame CPU uploads beyond state changes; only update the bindless buffers when the
+///   animation or skeleton data itself changes.
+pub trait BindlessAnimationRegistry {
+    fn register_skeleton(&mut self) -> Handle<SkeletonHeader>;
+    fn unregister_skeleton(&mut self, handle: Handle<SkeletonHeader>);
+    fn register_joint(&mut self) -> Handle<JointTransform>;
+    fn unregister_joint(&mut self, handle: Handle<JointTransform>);
+    fn register_clip(&mut self) -> Handle<AnimationClip>;
+    fn unregister_clip(&mut self, handle: Handle<AnimationClip>);
+    fn register_track(&mut self) -> Handle<AnimationTrack>;
+    fn unregister_track(&mut self, handle: Handle<AnimationTrack>);
+    fn register_keyframe(&mut self) -> Handle<AnimationKeyframe>;
+    fn unregister_keyframe(&mut self, handle: Handle<AnimationKeyframe>);
+    fn register_animation_state(&mut self) -> Handle<AnimationState>;
+    fn unregister_animation_state(&mut self, handle: Handle<AnimationState>);
 }
 
 pub struct DefaultState {
@@ -517,5 +546,103 @@ impl BindlessTextureRegistry for BindlessState {
         if let Some(resource) = sampler_resource.as_ref() {
             self.update_tables("meshi_bindless_samplers", resource);
         }
+    }
+}
+
+impl BindlessAnimationRegistry for BindlessState {
+    fn register_skeleton(&mut self) -> Handle<SkeletonHeader> {
+        let mut handle = None;
+        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
+            handle = Some(skeletons.add_skeleton());
+        })
+        .expect("register bindless skeleton in furikake");
+        handle.expect("bindless skeleton handle")
+    }
+
+    fn unregister_skeleton(&mut self, handle: Handle<SkeletonHeader>) {
+        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
+            skeletons.remove_skeleton(handle);
+        })
+        .expect("unregister bindless skeleton in furikake");
+    }
+
+    fn register_joint(&mut self) -> Handle<JointTransform> {
+        let mut handle = None;
+        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
+            handle = Some(skeletons.add_joint());
+        })
+        .expect("register bindless joint in furikake");
+        handle.expect("bindless joint handle")
+    }
+
+    fn unregister_joint(&mut self, handle: Handle<JointTransform>) {
+        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
+            skeletons.remove_joint(handle);
+        })
+        .expect("unregister bindless joint in furikake");
+    }
+
+    fn register_clip(&mut self) -> Handle<AnimationClip> {
+        let mut handle = None;
+        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
+            handle = Some(anims.add_clip());
+        })
+        .expect("register bindless animation clip in furikake");
+        handle.expect("bindless animation clip handle")
+    }
+
+    fn unregister_clip(&mut self, handle: Handle<AnimationClip>) {
+        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
+            anims.remove_clip(handle);
+        })
+        .expect("unregister bindless animation clip in furikake");
+    }
+
+    fn register_track(&mut self) -> Handle<AnimationTrack> {
+        let mut handle = None;
+        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
+            handle = Some(anims.add_track());
+        })
+        .expect("register bindless animation track in furikake");
+        handle.expect("bindless animation track handle")
+    }
+
+    fn unregister_track(&mut self, handle: Handle<AnimationTrack>) {
+        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
+            anims.remove_track(handle);
+        })
+        .expect("unregister bindless animation track in furikake");
+    }
+
+    fn register_keyframe(&mut self) -> Handle<AnimationKeyframe> {
+        let mut handle = None;
+        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
+            handle = Some(anims.add_keyframe());
+        })
+        .expect("register bindless animation keyframe in furikake");
+        handle.expect("bindless animation keyframe handle")
+    }
+
+    fn unregister_keyframe(&mut self, handle: Handle<AnimationKeyframe>) {
+        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
+            anims.remove_keyframe(handle);
+        })
+        .expect("unregister bindless animation keyframe in furikake");
+    }
+
+    fn register_animation_state(&mut self) -> Handle<AnimationState> {
+        let mut handle = None;
+        self.reserved_mut::<ReservedBindlessSkinning, _>("meshi_bindless_skinning", |skinning| {
+            handle = Some(skinning.add_state());
+        })
+        .expect("register bindless animation state in furikake");
+        handle.expect("bindless animation state handle")
+    }
+
+    fn unregister_animation_state(&mut self, handle: Handle<AnimationState>) {
+        self.reserved_mut::<ReservedBindlessSkinning, _>("meshi_bindless_skinning", |skinning| {
+            skinning.remove_state(handle);
+        })
+        .expect("unregister bindless animation state in furikake");
     }
 }
