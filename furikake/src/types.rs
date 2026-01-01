@@ -204,6 +204,94 @@ pub struct Transformation {
     pub transform: Mat4,
 }
 
+/// GPU-facing handle identifier for bindless resources.
+pub type GpuHandle = u32;
+
+/// CPU-side handle for skeleton headers stored in bindless buffers.
+pub type SkeletonHandle = Handle<SkeletonHeader>;
+/// CPU-side handle for animation clip headers stored in bindless buffers.
+pub type AnimationClipHandle = Handle<AnimationClip>;
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct SkeletonHeader {
+    /// Total number of joints in this skeleton.
+    pub joint_count: u32,
+    /// Base offset into the joint data buffer.
+    pub joint_offset: u32,
+    /// Base offset into the bind pose data buffer.
+    pub bind_pose_offset: u32,
+    /// Padding to keep the struct 16-byte aligned when used in buffers.
+    pub _padding: u32,
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct JointTransform {
+    /// Parent joint index, or -1 for root.
+    pub parent_index: i32,
+    /// Padding to keep the struct 16-byte aligned when used in buffers.
+    pub _padding: [u32; 3],
+    /// Joint bind pose transform.
+    pub bind_pose: Mat4,
+    /// Inverse bind pose transform.
+    pub inverse_bind: Mat4,
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct AnimationClip {
+    /// Total duration of the clip in seconds.
+    pub duration: f32,
+    /// Number of tracks in this clip.
+    pub track_count: u32,
+    /// Base offset into the animation track buffer.
+    pub track_offset: u32,
+    /// Padding to keep the struct 16-byte aligned when used in buffers.
+    pub _padding: u32,
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct AnimationTrack {
+    /// Joint index affected by this track.
+    pub joint_index: u32,
+    /// Number of keyframes in this track.
+    pub keyframe_count: u32,
+    /// Base offset into the keyframe buffer.
+    pub keyframe_offset: u32,
+    /// Padding to keep the struct 16-byte aligned when used in buffers.
+    pub _padding: u32,
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct AnimationKeyframe {
+    /// Time in seconds for this keyframe.
+    pub time: f32,
+    /// Padding to keep the struct 16-byte aligned when used in buffers.
+    pub _padding: [f32; 3],
+    /// Payload value (translation, rotation, or scale packed as a Vec4).
+    pub value: Vec4,
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct AnimationState {
+    /// GPU handle for the active clip (Handle<T>::slot).
+    pub clip_handle: GpuHandle,
+    /// GPU handle for the active skeleton (Handle<T>::slot).
+    pub skeleton_handle: GpuHandle,
+    /// Start time in seconds.
+    pub start_time: f32,
+    /// Playback rate multiplier.
+    pub playback_rate: f32,
+    /// Looping flag (0 = once, 1 = loop).
+    pub looping: u32,
+    /// Padding to keep the struct 16-byte aligned when used in buffers.
+    pub _padding: [u32; 3],
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Texture {
