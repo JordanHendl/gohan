@@ -4,6 +4,7 @@ pub mod reservations;
 pub mod resolver;
 pub mod types;
 
+use bento::builder::{CSOBuilder, PSOBuilder};
 use dashi::{cmd::Executable, BindTableVariableType, CommandStream, Context, ImageView};
 use error::FurikakeError;
 use reservations::{
@@ -23,6 +24,40 @@ pub trait GPUState {
     fn reserved_names() -> &'static [&'static str];
     fn reserved_metadata() -> &'static [ReservedMetadata];
     fn binding(&self, key: &str) -> Result<&dyn ReservedItem, FurikakeError>;
+}
+
+pub trait PSOBuilderFurikakeExt {
+    fn add_reserved_table_variable<T: GPUState>(
+        self,
+        state: &T,
+        key: &str,
+    ) -> Result<Self, FurikakeError>
+    where
+        Self: Sized;
+}
+
+impl PSOBuilderFurikakeExt for PSOBuilder {
+    fn add_reserved_table_variable<T: GPUState>(
+        self,
+        state: &T,
+        key: &str,
+    ) -> Result<Self, FurikakeError> {
+        let reserved = state.binding(key)?.binding();
+        let reservations::ReservedBinding::TableBinding { resources, .. } = reserved;
+        Ok(self.add_table_variable_with_resources(key, resources))
+    }
+}
+
+impl PSOBuilderFurikakeExt for CSOBuilder {
+    fn add_reserved_table_variable<T: GPUState>(
+        self,
+        state: &T,
+        key: &str,
+    ) -> Result<Self, FurikakeError> {
+        let reserved = state.binding(key)?.binding();
+        let reservations::ReservedBinding::TableBinding { resources, .. } = reserved;
+        Ok(self.add_table_variable_with_resources(key, resources))
+    }
 }
 
 pub struct DefaultState {
