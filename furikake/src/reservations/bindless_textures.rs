@@ -126,6 +126,22 @@ impl ReservedBindlessTextures {
             data: Rc::clone(&self.data),
         }
     }
+
+    pub fn image_resource(&self, texture: u16) -> Option<IndexedResource> {
+        self.data
+            .borrow()
+            .device_image_data
+            .get(texture as usize)
+            .cloned()
+    }
+
+    pub fn sampler_resource(&self, texture: u16) -> Option<IndexedResource> {
+        self.data
+            .borrow()
+            .device_sampler_data
+            .get(texture as usize)
+            .cloned()
+    }
     
     pub fn remove_texture(&mut self, texture: u16) {
         let mut data = self.data.borrow_mut();

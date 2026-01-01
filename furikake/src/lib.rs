@@ -4,8 +4,11 @@ pub mod reservations;
 pub mod resolver;
 pub mod types;
 
-use bento::builder::{CSOBuilder, PSOBuilder};
-use dashi::{cmd::Executable, BindTableVariableType, CommandStream, Context, ImageView};
+use bento::builder::{BindTableUpdateTarget, CSO, CSOBuilder, PSO, PSOBuilder};
+use dashi::{
+    cmd::Executable, BindTableVariableType, BindTableUpdateInfo, CommandStream, Context,
+    ImageView, IndexedBindingInfo, IndexedResource,
+};
 use error::FurikakeError;
 use reservations::{
     bindless_camera::ReservedBindlessCamera, bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials, bindless_textures::ReservedBindlessTextures, bindless_transformations::ReservedBindlessTransformations, ReservedItem, ReservedTiming
@@ -68,6 +71,7 @@ pub struct DefaultState {
 pub struct BindlessState {
     ctx: NonNull<Context>,
     reserved: HashMap<String, Box<dyn ReservedItem>>,
+    bind_table_subscriptions: HashMap<String, Vec<BindTableUpdateTarget>>,
 }
 
 #[cfg(test)]
@@ -308,6 +312,7 @@ impl BindlessState {
         Self {
             reserved,
             ctx: NonNull::from_ref(ctx),
+            bind_table_subscriptions: HashMap::new(),
         }
     }
 
@@ -327,6 +332,81 @@ impl BindlessState {
             cmd = cmd.combine(iter.1.update()?);
         }
         Ok(cmd.end())
+    }
+
+    pub fn register_pso_tables(&mut self, pso: &PSO) {
+        if pso.ctx.as_ptr() != self.ctx.as_ptr() {
+            return;
+        }
+
+        for key in Self::reserved_names() {
+            if let Some(target) = pso.table_binding(key) {
+                self.register_table_target(key, target);
+            }
+        }
+    }
+
+    pub fn register_cso_tables(&mut self, cso: &CSO) {
+        if cso.ctx.as_ptr() != self.ctx.as_ptr() {
+            return;
+        }
+
+        for key in Self::reserved_names() {
+            if let Some(target) = cso.table_binding(key) {
+                self.register_table_target(key, target);
+            }
+        }
+    }
+
+    pub fn unregister_table(&mut self, key: &str, target: BindTableUpdateTarget) {
+        let Some(targets) = self.bind_table_subscriptions.get_mut(key) else {
+            return;
+        };
+
+        targets.retain(|existing| {
+            existing.table != target.table || existing.binding != target.binding
+        });
+
+        if targets.is_empty() {
+            self.bind_table_subscriptions.remove(key);
+        }
+    }
+
+    fn register_table_target(&mut self, key: &str, target: BindTableUpdateTarget) {
+        let targets = self
+            .bind_table_subscriptions
+            .entry(key.to_string())
+            .or_default();
+        if !targets.iter().any(|existing| {
+            existing.table == target.table && existing.binding == target.binding
+        }) {
+            targets.push(target);
+        }
+    }
+
+    fn update_tables(&mut self, key: &str, resource: &IndexedResource) {
+        let Some(targets) = self.bind_table_subscriptions.get(key).cloned() else {
+            return;
+        };
+
+        let ctx = unsafe { self.ctx.as_mut() };
+        let resources = std::slice::from_ref(resource);
+
+        for target in targets {
+            if resource.slot >= target.size {
+                continue;
+            }
+
+            let bindings = [IndexedBindingInfo {
+                resources,
+                binding: target.binding,
+            }];
+
+            let _ = ctx.update_bind_table(&BindTableUpdateInfo {
+                table: target.table,
+                bindings: &bindings,
+            });
+        }
     }
 
     pub fn reserved_mut<T: 'static, F: FnOnce(&mut T)>(
@@ -370,17 +450,41 @@ impl BindlessState {
 impl BindlessTextureRegistry for BindlessState {
     fn add_texture(&mut self, view: ImageView) -> u16 {
         let mut id = None;
+        let mut image_resource = None;
+        let mut sampler_resource = None;
         self.reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-            id = Some(textures.add_texture(view));
+            let next_id = textures.add_texture(view);
+            image_resource = textures.image_resource(next_id);
+            sampler_resource = textures.sampler_resource(next_id);
+            id = Some(next_id);
         })
         .expect("register bindless texture in furikake");
+
+        if let Some(resource) = image_resource.as_ref() {
+            self.update_tables("meshi_bindless_textures", resource);
+        }
+        if let Some(resource) = sampler_resource.as_ref() {
+            self.update_tables("meshi_bindless_samplers", resource);
+        }
+
         id.expect("bindless texture id")
     }
 
     fn remove_texture(&mut self, id: u16) {
+        let mut image_resource = None;
+        let mut sampler_resource = None;
         self.reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
             textures.remove_texture(id);
+            image_resource = textures.image_resource(id);
+            sampler_resource = textures.sampler_resource(id);
         })
         .expect("remove bindless texture in furikake");
+
+        if let Some(resource) = image_resource.as_ref() {
+            self.update_tables("meshi_bindless_textures", resource);
+        }
+        if let Some(resource) = sampler_resource.as_ref() {
+            self.update_tables("meshi_bindless_samplers", resource);
+        }
     }
 }

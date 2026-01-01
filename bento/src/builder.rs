@@ -397,6 +397,16 @@ pub struct PSO {
 }
 
 impl PSO {
+    pub fn table_binding(&self, key: &str) -> Option<BindTableUpdateTarget> {
+        self.table_bindings.get(key).copied().map(|binding| {
+            BindTableUpdateTarget {
+                table: binding.table,
+                binding: binding.binding,
+                size: binding.size,
+            }
+        })
+    }
+
     pub fn update_table(&mut self, key: &str, resource: IndexedResource) {
         self.update_table_slice(key, std::slice::from_ref(&resource));
     }
@@ -438,6 +448,13 @@ struct TableBinding {
     table: Handle<BindTable>,
     binding: u32,
     size: u32,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BindTableUpdateTarget {
+    pub table: Handle<BindTable>,
+    pub binding: u32,
+    pub size: u32,
 }
 
 #[derive(Clone)]
@@ -952,6 +969,16 @@ pub struct CSO {
 }
 
 impl CSO {
+    pub fn table_binding(&self, key: &str) -> Option<BindTableUpdateTarget> {
+        self.table_bindings.get(key).copied().map(|binding| {
+            BindTableUpdateTarget {
+                table: binding.table,
+                binding: binding.binding,
+                size: binding.size,
+            }
+        })
+    }
+
     pub fn update_table(&mut self, key: &str, resource: IndexedResource) {
         self.update_table_slice(key, std::slice::from_ref(&resource));
     }
