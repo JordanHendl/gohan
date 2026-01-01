@@ -174,6 +174,7 @@ impl DefaultResources {
                 mip_levels: 1,
                 samples: SampleCount::S1,
                 initial_data: Some(&BLACK_PIXEL),
+                ..Default::default()
             })
             .map_err(|source| PipelineBuildError::DefaultResourceCreateFailed {
                 name: name.to_string(),
@@ -208,6 +209,7 @@ impl DefaultResources {
                 mip_levels: 1,
                 samples: SampleCount::S1,
                 initial_data: Some(&BLACK_PIXEL),
+                ..Default::default()
             })
             .map_err(|source| PipelineBuildError::DefaultResourceCreateFailed {
                 name: name.to_string(),
