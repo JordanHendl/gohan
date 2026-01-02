@@ -378,7 +378,7 @@ mod tests {
             .iter()
             .map(|v| (v.set, v.kind.var_type))
             .collect();
-        assert_eq!(vertex_sets.len(), 3);
+        assert_eq!(vertex_sets.len(), 6);
         assert!(vertex_sets.contains(&(0, dashi::BindTableVariableType::Storage)));
         assert!(vertex_sets.contains(&(1, dashi::BindTableVariableType::Storage)));
 
@@ -415,7 +415,7 @@ mod tests {
             .collect();
         let offsets: Vec<_> = layout.entries.iter().map(|e| e.offset).collect();
 
-        assert_eq!(layout.stride, 64);
+        assert_eq!(layout.stride, 96);
         assert!(matches!(layout.rate, dashi::VertexRate::Vertex));
         assert_eq!(locations.len(), 5);
         assert_eq!(locations[0], (0, &dashi::ShaderPrimitiveType::Vec3));

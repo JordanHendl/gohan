@@ -6,6 +6,8 @@ struct PerObjectInfo  {
     Handle scene_id;
     Handle material_id;
     Handle camera_id;
+    Handle skeleton_id;
+    Handle animation_state_id;
 };
 
 
