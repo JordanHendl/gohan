@@ -417,14 +417,14 @@ mod tests {
 
         assert_eq!(layout.stride, 96);
         assert!(matches!(layout.rate, dashi::VertexRate::Vertex));
-        assert_eq!(locations.len(), 5);
+        assert_eq!(locations.len(), 7);
         assert_eq!(locations[0], (0, &dashi::ShaderPrimitiveType::Vec3));
         assert_eq!(locations[1], (1, &dashi::ShaderPrimitiveType::Vec3));
         assert_eq!(locations[2], (2, &dashi::ShaderPrimitiveType::Vec4));
         assert_eq!(locations[3], (3, &dashi::ShaderPrimitiveType::Vec2));
         assert_eq!(locations[4], (4, &dashi::ShaderPrimitiveType::Vec4));
 
-        assert_eq!(offsets, vec![0, 12, 24, 40, 48]);
+        assert_eq!(offsets, vec![0, 12, 24, 40, 48, 64, 80]);
     }
 
     fn expected_binding_count(var: &dashi::BindTableVariable) -> u32 {

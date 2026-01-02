@@ -1,5 +1,8 @@
 pub mod bindless_animations;
+pub mod bindless_animation_keyframes;
+pub mod bindless_animation_tracks;
 pub mod bindless_camera;
+pub mod bindless_joints;
 pub mod bindless_lights;
 pub mod bindless_materials;
 pub mod bindless_skeletons;

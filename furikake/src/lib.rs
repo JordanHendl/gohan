@@ -13,10 +13,12 @@ use dashi::Handle;
 
 use error::FurikakeError;
 use reservations::{
+    bindless_animation_keyframes::ReservedBindlessAnimationKeyframes,
+    bindless_animation_tracks::ReservedBindlessAnimationTracks,
     bindless_animations::ReservedBindlessAnimations, bindless_camera::ReservedBindlessCamera,
-    bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials,
-    bindless_skeletons::ReservedBindlessSkeletons, bindless_skinning::ReservedBindlessSkinning,
-    bindless_textures::ReservedBindlessTextures,
+    bindless_joints::ReservedBindlessJoints, bindless_lights::ReservedBindlessLights,
+    bindless_materials::ReservedBindlessMaterials, bindless_skeletons::ReservedBindlessSkeletons,
+    bindless_skinning::ReservedBindlessSkinning, bindless_textures::ReservedBindlessTextures,
     bindless_transformations::ReservedBindlessTransformations, ReservedItem, ReservedTiming,
 };
 use std::{collections::HashMap, ptr::NonNull};
@@ -261,7 +263,7 @@ impl DefaultState {
 ///////////////////////////////////////////////////////////
 ///
 
-const BINDLESS_STATE_NAMES: [&str; 10] = [
+const BINDLESS_STATE_NAMES: [&str; 13] = [
     "meshi_timing",
     "meshi_bindless_cameras",
     "meshi_bindless_textures",
@@ -270,10 +272,13 @@ const BINDLESS_STATE_NAMES: [&str; 10] = [
     "meshi_bindless_materials",
     "meshi_bindless_lights",
     "meshi_bindless_skeletons",
+    "meshi_bindless_joints",
     "meshi_bindless_animations",
+    "meshi_bindless_animation_tracks",
+    "meshi_bindless_animation_keyframes",
     "meshi_bindless_skinning",
 ];
-const BINDLESS_METADATA: [ReservedMetadata; 10] = [
+const BINDLESS_METADATA: [ReservedMetadata; 13] = [
     ReservedMetadata {
         name: "meshi_timing",
         kind: BindTableVariableType::Uniform,
@@ -307,7 +312,19 @@ const BINDLESS_METADATA: [ReservedMetadata; 10] = [
         kind: BindTableVariableType::Storage,
     },
     ReservedMetadata {
+        name: "meshi_bindless_joints",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
         name: "meshi_bindless_animations",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
+        name: "meshi_bindless_animation_tracks",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
+        name: "meshi_bindless_animation_keyframes",
         kind: BindTableVariableType::Storage,
     },
     ReservedMetadata {
@@ -362,10 +379,22 @@ impl BindlessState {
         );
         reserved.insert(
             names[8].to_string(),
-            Box::new(ReservedBindlessAnimations::new(ctx)),
+            Box::new(ReservedBindlessJoints::new(ctx)),
         );
         reserved.insert(
             names[9].to_string(),
+            Box::new(ReservedBindlessAnimations::new(ctx)),
+        );
+        reserved.insert(
+            names[10].to_string(),
+            Box::new(ReservedBindlessAnimationTracks::new(ctx)),
+        );
+        reserved.insert(
+            names[11].to_string(),
+            Box::new(ReservedBindlessAnimationKeyframes::new(ctx)),
+        );
+        reserved.insert(
+            names[12].to_string(),
             Box::new(ReservedBindlessSkinning::new(ctx)),
         );
 
@@ -568,16 +597,16 @@ impl BindlessAnimationRegistry for BindlessState {
 
     fn register_joint(&mut self) -> Handle<JointTransform> {
         let mut handle = None;
-        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
-            handle = Some(skeletons.add_joint());
+        self.reserved_mut::<ReservedBindlessJoints, _>("meshi_bindless_joints", |joints| {
+            handle = Some(joints.add_joint());
         })
         .expect("register bindless joint in furikake");
         handle.expect("bindless joint handle")
     }
 
     fn unregister_joint(&mut self, handle: Handle<JointTransform>) {
-        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
-            skeletons.remove_joint(handle);
+        self.reserved_mut::<ReservedBindlessJoints, _>("meshi_bindless_joints", |joints| {
+            joints.remove_joint(handle);
         })
         .expect("unregister bindless joint in furikake");
     }
@@ -600,33 +629,45 @@ impl BindlessAnimationRegistry for BindlessState {
 
     fn register_track(&mut self) -> Handle<AnimationTrack> {
         let mut handle = None;
-        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
-            handle = Some(anims.add_track());
-        })
+        self.reserved_mut::<ReservedBindlessAnimationTracks, _>(
+            "meshi_bindless_animation_tracks",
+            |tracks| {
+                handle = Some(tracks.add_track());
+            },
+        )
         .expect("register bindless animation track in furikake");
         handle.expect("bindless animation track handle")
     }
 
     fn unregister_track(&mut self, handle: Handle<AnimationTrack>) {
-        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
-            anims.remove_track(handle);
-        })
+        self.reserved_mut::<ReservedBindlessAnimationTracks, _>(
+            "meshi_bindless_animation_tracks",
+            |tracks| {
+                tracks.remove_track(handle);
+            },
+        )
         .expect("unregister bindless animation track in furikake");
     }
 
     fn register_keyframe(&mut self) -> Handle<AnimationKeyframe> {
         let mut handle = None;
-        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
-            handle = Some(anims.add_keyframe());
-        })
+        self.reserved_mut::<ReservedBindlessAnimationKeyframes, _>(
+            "meshi_bindless_animation_keyframes",
+            |keyframes| {
+                handle = Some(keyframes.add_keyframe());
+            },
+        )
         .expect("register bindless animation keyframe in furikake");
         handle.expect("bindless animation keyframe handle")
     }
 
     fn unregister_keyframe(&mut self, handle: Handle<AnimationKeyframe>) {
-        self.reserved_mut::<ReservedBindlessAnimations, _>("meshi_bindless_animations", |anims| {
-            anims.remove_keyframe(handle);
-        })
+        self.reserved_mut::<ReservedBindlessAnimationKeyframes, _>(
+            "meshi_bindless_animation_keyframes",
+            |keyframes| {
+                keyframes.remove_keyframe(handle);
+            },
+        )
         .expect("unregister bindless animation keyframe in furikake");
     }
 
