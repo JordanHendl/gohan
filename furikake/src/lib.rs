@@ -16,10 +16,12 @@ use reservations::{
     bindless_animation_keyframes::ReservedBindlessAnimationKeyframes,
     bindless_animation_tracks::ReservedBindlessAnimationTracks,
     bindless_animations::ReservedBindlessAnimations, bindless_camera::ReservedBindlessCamera,
-    bindless_joints::ReservedBindlessJoints, bindless_lights::ReservedBindlessLights,
-    bindless_materials::ReservedBindlessMaterials, bindless_skeletons::ReservedBindlessSkeletons,
-    bindless_skinning::ReservedBindlessSkinning, bindless_textures::ReservedBindlessTextures,
-    bindless_transformations::ReservedBindlessTransformations, ReservedItem, ReservedTiming,
+    bindless_indices::ReservedBindlessIndices, bindless_joints::ReservedBindlessJoints,
+    bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials,
+    bindless_skeletons::ReservedBindlessSkeletons, bindless_skinning::ReservedBindlessSkinning,
+    bindless_textures::ReservedBindlessTextures,
+    bindless_transformations::ReservedBindlessTransformations,
+    bindless_vertices::ReservedBindlessVertices, ReservedItem, ReservedTiming,
 };
 use std::{collections::HashMap, ptr::NonNull};
 use tare::transient::BindlessTextureRegistry;
@@ -263,7 +265,7 @@ impl DefaultState {
 ///////////////////////////////////////////////////////////
 ///
 
-const BINDLESS_STATE_NAMES: [&str; 13] = [
+const BINDLESS_STATE_NAMES: [&str; 15] = [
     "meshi_timing",
     "meshi_bindless_cameras",
     "meshi_bindless_textures",
@@ -277,8 +279,10 @@ const BINDLESS_STATE_NAMES: [&str; 13] = [
     "meshi_bindless_animation_tracks",
     "meshi_bindless_animation_keyframes",
     "meshi_bindless_skinning",
+    "meshi_bindless_vertices",
+    "meshi_bindless_indices",
 ];
-const BINDLESS_METADATA: [ReservedMetadata; 13] = [
+const BINDLESS_METADATA: [ReservedMetadata; 15] = [
     ReservedMetadata {
         name: "meshi_timing",
         kind: BindTableVariableType::Uniform,
@@ -329,6 +333,14 @@ const BINDLESS_METADATA: [ReservedMetadata; 13] = [
     },
     ReservedMetadata {
         name: "meshi_bindless_skinning",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
+        name: "meshi_bindless_vertices",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
+        name: "meshi_bindless_indices",
         kind: BindTableVariableType::Storage,
     },
 ];
@@ -396,6 +408,14 @@ impl BindlessState {
         reserved.insert(
             names[12].to_string(),
             Box::new(ReservedBindlessSkinning::new(ctx)),
+        );
+        reserved.insert(
+            names[13].to_string(),
+            Box::new(ReservedBindlessVertices::new(ctx)),
+        );
+        reserved.insert(
+            names[14].to_string(),
+            Box::new(ReservedBindlessIndices::new(ctx)),
         );
 
         Self {

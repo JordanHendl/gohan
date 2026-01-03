@@ -212,6 +212,23 @@ pub type SkeletonHandle = Handle<SkeletonHeader>;
 /// CPU-side handle for animation clip headers stored in bindless buffers.
 pub type AnimationClipHandle = Handle<AnimationClip>;
 
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VertexBufferSlot {
+    Skeleton = 0,
+    Simple = 1,
+}
+
+impl VertexBufferSlot {
+    pub const COUNT: usize = 2;
+
+    pub const fn as_index(self) -> usize {
+        self as usize
+    }
+}
+
+pub const VERTEX_BUFFER_SLOT_COUNT: usize = VertexBufferSlot::COUNT;
+
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Default)]
 pub struct SkeletonHeader {

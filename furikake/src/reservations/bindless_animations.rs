@@ -48,6 +48,14 @@ impl ReservedBindlessAnimations {
             .unwrap_or_else(|| Handle::new(u16::MAX, u16::MAX))
     }
 
+    pub fn push_clip(&mut self, clip: AnimationClip) -> Handle<AnimationClip> {
+        let handle = self.add_clip();
+        if handle.valid() {
+            *self.clip_mut(handle) = clip;
+        }
+        handle
+    }
+
     pub fn remove_clip(&mut self, clip: Handle<AnimationClip>) {
         if clip.valid() && (clip.slot as usize) < self.clips.as_slice::<AnimationClip>().len() {
             self.available_clips.push(clip.slot);

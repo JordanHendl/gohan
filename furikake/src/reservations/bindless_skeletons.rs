@@ -48,6 +48,14 @@ impl ReservedBindlessSkeletons {
             .unwrap_or_else(|| Handle::new(u16::MAX, u16::MAX))
     }
 
+    pub fn push_skeleton(&mut self, skeleton: SkeletonHeader) -> Handle<SkeletonHeader> {
+        let handle = self.add_skeleton();
+        if handle.valid() {
+            *self.skeleton_mut(handle) = skeleton;
+        }
+        handle
+    }
+
     pub fn remove_skeleton(&mut self, skeleton: Handle<SkeletonHeader>) {
         if skeleton.valid() && (skeleton.slot as usize) < self.skeletons.as_slice::<SkeletonHeader>().len() {
             self.available_skeletons.push(skeleton.slot);

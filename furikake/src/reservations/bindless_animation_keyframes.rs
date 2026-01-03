@@ -49,6 +49,14 @@ impl ReservedBindlessAnimationKeyframes {
             .unwrap_or_else(|| Handle::new(u16::MAX, u16::MAX))
     }
 
+    pub fn push_keyframe(&mut self, keyframe: AnimationKeyframe) -> Handle<AnimationKeyframe> {
+        let handle = self.add_keyframe();
+        if handle.valid() {
+            *self.keyframe_mut(handle) = keyframe;
+        }
+        handle
+    }
+
     pub fn remove_keyframe(&mut self, keyframe: Handle<AnimationKeyframe>) {
         if keyframe.valid()
             && (keyframe.slot as usize) < self.keyframes.as_slice::<AnimationKeyframe>().len()

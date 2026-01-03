@@ -48,6 +48,14 @@ impl ReservedBindlessSkinning {
             .unwrap_or_else(|| Handle::new(u16::MAX, u16::MAX))
     }
 
+    pub fn push_state(&mut self, state: AnimationState) -> Handle<AnimationState> {
+        let handle = self.add_state();
+        if handle.valid() {
+            *self.state_mut(handle) = state;
+        }
+        handle
+    }
+
     pub fn remove_state(&mut self, state: Handle<AnimationState>) {
         if state.valid() && (state.slot as usize) < self.states.as_slice::<AnimationState>().len()
         {

@@ -55,6 +55,14 @@ impl ReservedBindlessLights {
         return Handle::new(0, 0);
     }
 
+    pub fn push_light(&mut self, light: Light) -> Handle<Light> {
+        let handle = self.add_light();
+        if handle.valid() {
+            *self.light_mut(handle) = light;
+        }
+        handle
+    }
+
     pub fn light(&self, handle: Handle<Light>) -> &Light {
         &self.data.as_slice()[handle.slot as usize]
     }

@@ -48,6 +48,14 @@ impl ReservedBindlessJoints {
             .unwrap_or_else(|| Handle::new(u16::MAX, u16::MAX))
     }
 
+    pub fn push_joint(&mut self, joint: JointTransform) -> Handle<JointTransform> {
+        let handle = self.add_joint();
+        if handle.valid() {
+            *self.joint_mut(handle) = joint;
+        }
+        handle
+    }
+
     pub fn remove_joint(&mut self, joint: Handle<JointTransform>) {
         if joint.valid() && (joint.slot as usize) < self.joints.as_slice::<JointTransform>().len() {
             self.available_joints.push(joint.slot);

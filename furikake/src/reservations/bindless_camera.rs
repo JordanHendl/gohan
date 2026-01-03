@@ -55,6 +55,14 @@ impl ReservedBindlessCamera {
         return Handle::new(0, 0);
     }
 
+    pub fn push_camera(&mut self, camera: Camera) -> Handle<Camera> {
+        let handle = self.add_camera();
+        if handle.valid() {
+            *self.camera_mut(handle) = camera;
+        }
+        handle
+    }
+
     pub fn camera(&self, handle: Handle<Camera>) -> &Camera {
         &self.data.as_slice()[handle.slot as usize]
     }

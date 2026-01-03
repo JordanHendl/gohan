@@ -54,6 +54,14 @@ impl ReservedBindlessMaterials {
         return Handle::new(0, 0);
     }
 
+    pub fn push_material(&mut self, material: Material) -> Handle<Material> {
+        let handle = self.add_material();
+        if handle.valid() {
+            *self.material_mut(handle) = material;
+        }
+        handle
+    }
+
     pub fn material(&self, handle: Handle<Material>) -> &Material {
         &self.data.as_slice()[handle.slot as usize]
     }

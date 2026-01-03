@@ -48,6 +48,14 @@ impl ReservedBindlessAnimationTracks {
             .unwrap_or_else(|| Handle::new(u16::MAX, u16::MAX))
     }
 
+    pub fn push_track(&mut self, track: AnimationTrack) -> Handle<AnimationTrack> {
+        let handle = self.add_track();
+        if handle.valid() {
+            *self.track_mut(handle) = track;
+        }
+        handle
+    }
+
     pub fn remove_track(&mut self, track: Handle<AnimationTrack>) {
         if track.valid() && (track.slot as usize) < self.tracks.as_slice::<AnimationTrack>().len() {
             self.available_tracks.push(track.slot);

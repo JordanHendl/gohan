@@ -54,6 +54,14 @@ impl ReservedBindlessTransformations {
         return Handle::new(u16::MAX, u16::MAX);
     }
 
+    pub fn push_transform(&mut self, transform: Transformation) -> Handle<Transformation> {
+        let handle = self.add_transform();
+        if handle.valid() {
+            *self.transform_mut(handle) = transform;
+        }
+        handle
+    }
+
     pub fn transform(&self, handle: Handle<Transformation>) -> &Transformation {
         &self.data.as_slice()[handle.slot as usize]
     }
