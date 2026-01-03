@@ -5,15 +5,15 @@ pub mod resolver;
 pub mod types;
 
 use bento::builder::{BindTableUpdateTarget, CSO, CSOBuilder, PSO, PSOBuilder};
-use dashi::{
-    cmd::Executable, BindTableVariableType, BindTableUpdateInfo, CommandStream, Context,
-    ImageView, IndexedBindingInfo, IndexedResource,
-};
 use dashi::Handle;
+use dashi::{
+    BindTableUpdateInfo, BindTableVariableType, CommandStream, Context, ImageView,
+    IndexedBindingInfo, IndexedResource, cmd::Executable,
+};
 
 use error::FurikakeError;
 use reservations::{
-    bindless_animation_keyframes::ReservedBindlessAnimationKeyframes,
+    ReservedItem, ReservedTiming, bindless_animation_keyframes::ReservedBindlessAnimationKeyframes,
     bindless_animation_tracks::ReservedBindlessAnimationTracks,
     bindless_animations::ReservedBindlessAnimations, bindless_camera::ReservedBindlessCamera,
     bindless_indices::ReservedBindlessIndices, bindless_joints::ReservedBindlessJoints,
@@ -21,7 +21,7 @@ use reservations::{
     bindless_skeletons::ReservedBindlessSkeletons, bindless_skinning::ReservedBindlessSkinning,
     bindless_textures::ReservedBindlessTextures,
     bindless_transformations::ReservedBindlessTransformations,
-    bindless_vertices::ReservedBindlessVertices, ReservedItem, ReservedTiming,
+    bindless_vertices::ReservedBindlessVertices,
 };
 use std::{collections::HashMap, ptr::NonNull};
 use tare::transient::BindlessTextureRegistry;
@@ -51,6 +51,10 @@ pub trait PSOBuilderFurikakeExt {
     ) -> Result<Self, FurikakeError>
     where
         Self: Sized;
+
+    fn add_reserved_table_variables<T: GPUState>(self, state: &T) -> Result<Self, FurikakeError>
+    where
+        Self: Sized;
 }
 
 impl PSOBuilderFurikakeExt for PSOBuilder {
@@ -63,6 +67,16 @@ impl PSOBuilderFurikakeExt for PSOBuilder {
         let reservations::ReservedBinding::TableBinding { resources, .. } = reserved;
         Ok(self.add_table_variable_with_resources(key, resources))
     }
+
+    fn add_reserved_table_variables<T: GPUState>(
+        mut self,
+        state: &T,
+    ) -> Result<Self, FurikakeError> {
+        for key in T::reserved_names() {
+            self = self.add_reserved_table_variable(state, key)?;
+        }
+        Ok(self)
+    }
 }
 
 impl PSOBuilderFurikakeExt for CSOBuilder {
@@ -74,6 +88,16 @@ impl PSOBuilderFurikakeExt for CSOBuilder {
         let reserved = state.binding(key)?.binding();
         let reservations::ReservedBinding::TableBinding { resources, .. } = reserved;
         Ok(self.add_table_variable_with_resources(key, resources))
+    }
+
+    fn add_reserved_table_variables<T: GPUState>(
+        mut self,
+        state: &T,
+    ) -> Result<Self, FurikakeError> {
+        for key in T::reserved_names() {
+            self = self.add_reserved_table_variable(state, key)?;
+        }
+        Ok(self)
     }
 }
 
@@ -486,9 +510,10 @@ impl BindlessState {
             .bind_table_subscriptions
             .entry(key.to_string())
             .or_default();
-        if !targets.iter().any(|existing| {
-            existing.table == target.table && existing.binding == target.binding
-        }) {
+        if !targets
+            .iter()
+            .any(|existing| existing.table == target.table && existing.binding == target.binding)
+        {
             targets.push(target);
         }
     }
@@ -601,17 +626,23 @@ impl BindlessTextureRegistry for BindlessState {
 impl BindlessAnimationRegistry for BindlessState {
     fn register_skeleton(&mut self) -> Handle<SkeletonHeader> {
         let mut handle = None;
-        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
-            handle = Some(skeletons.add_skeleton());
-        })
+        self.reserved_mut::<ReservedBindlessSkeletons, _>(
+            "meshi_bindless_skeletons",
+            |skeletons| {
+                handle = Some(skeletons.add_skeleton());
+            },
+        )
         .expect("register bindless skeleton in furikake");
         handle.expect("bindless skeleton handle")
     }
 
     fn unregister_skeleton(&mut self, handle: Handle<SkeletonHeader>) {
-        self.reserved_mut::<ReservedBindlessSkeletons, _>("meshi_bindless_skeletons", |skeletons| {
-            skeletons.remove_skeleton(handle);
-        })
+        self.reserved_mut::<ReservedBindlessSkeletons, _>(
+            "meshi_bindless_skeletons",
+            |skeletons| {
+                skeletons.remove_skeleton(handle);
+            },
+        )
         .expect("unregister bindless skeleton in furikake");
     }
 
