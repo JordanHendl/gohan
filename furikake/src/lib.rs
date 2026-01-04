@@ -19,7 +19,7 @@ use reservations::{
     bindless_indices::ReservedBindlessIndices, bindless_joints::ReservedBindlessJoints,
     bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials,
     bindless_skeletons::ReservedBindlessSkeletons, bindless_skinning::ReservedBindlessSkinning,
-    bindless_textures::ReservedBindlessTextures,
+    bindless_textures::ReservedBindlessTextures, particles::ReservedParticles,
     bindless_transformations::ReservedBindlessTransformations,
     bindless_vertices::ReservedBindlessVertices,
 };
@@ -289,7 +289,7 @@ impl DefaultState {
 ///////////////////////////////////////////////////////////
 ///
 
-const BINDLESS_STATE_NAMES: [&str; 15] = [
+const BINDLESS_STATE_NAMES: [&str; 16] = [
     "meshi_timing",
     "meshi_bindless_cameras",
     "meshi_bindless_textures",
@@ -305,8 +305,9 @@ const BINDLESS_STATE_NAMES: [&str; 15] = [
     "meshi_bindless_skinning",
     "meshi_bindless_vertices",
     "meshi_bindless_indices",
+    "meshi_particles",
 ];
-const BINDLESS_METADATA: [ReservedMetadata; 15] = [
+const BINDLESS_METADATA: [ReservedMetadata; 16] = [
     ReservedMetadata {
         name: "meshi_timing",
         kind: BindTableVariableType::Uniform,
@@ -365,6 +366,10 @@ const BINDLESS_METADATA: [ReservedMetadata; 15] = [
     },
     ReservedMetadata {
         name: "meshi_bindless_indices",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
+        name: "meshi_particles",
         kind: BindTableVariableType::Storage,
     },
 ];
@@ -440,6 +445,10 @@ impl BindlessState {
         reserved.insert(
             names[14].to_string(),
             Box::new(ReservedBindlessIndices::new(ctx)),
+        );
+        reserved.insert(
+            names[15].to_string(),
+            Box::new(ReservedParticles::new(ctx)),
         );
 
         Self {

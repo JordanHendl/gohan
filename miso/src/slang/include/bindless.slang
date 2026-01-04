@@ -1,6 +1,7 @@
 import handle;
 import miso;
 import lights;
+import particle;
 
 struct Material {
   uint base_color_texture_id;
@@ -86,6 +87,7 @@ uniform StructuredBuffer<AnimationKeyframe> meshi_bindless_animation_keyframes :
 uniform StructuredBuffer<AnimationState> meshi_bindless_skinning : register(t11, space0);
 uniform ByteAddressBuffer meshi_bindless_vertices[] : register(t12, space0);
 uniform StructuredBuffer<uint> meshi_bindless_indices : register(t13, space0);
+uniform StructuredBuffer<ParticleState> meshi_particles : register(t14, space0);
 
 // HELPERS
 float4 sample_texture(uint idx, float2 coords) {

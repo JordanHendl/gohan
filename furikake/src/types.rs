@@ -321,6 +321,89 @@ pub const LIGHT_TYPE_POINT: u32 = 1;
 pub const LIGHT_TYPE_SPOT: u32 = 2;
 pub const LIGHT_TYPE_AREA_RECT: u32 = 3;
 
+#[repr(u32)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ParticleSpace {
+    World3d = 0,
+    Screen2d = 1,
+}
+
+impl Default for ParticleSpace {
+    fn default() -> Self {
+        Self::World3d
+    }
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct ParticleState {
+    /// Particle position in world/view space.
+    pub position: Vec3,
+    /// Total lifetime in seconds.
+    pub lifetime: f32,
+    /// Particle velocity in world/view space.
+    pub velocity: Vec3,
+    /// Current age in seconds.
+    pub age: f32,
+    /// Particle color (rgba).
+    pub color: Vec4,
+    /// Particle size (xy).
+    pub size: Vec2,
+    /// Rotation angle in radians.
+    pub rotation: f32,
+    /// Space/plane selection for rendering.
+    pub space: ParticleSpace,
+    /// Sprite or animation frame index.
+    pub frame_index: u32,
+    /// Bitmask flags for particle behavior.
+    pub flags: u32,
+    /// Padding to keep the struct 16-byte aligned when used in buffers.
+    pub _padding: Vec2,
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
+pub struct ParticleEmitterState {
+    /// Base index into the particle buffer for this emitter.
+    pub first_particle: u32,
+    /// Maximum particles owned by this emitter.
+    pub max_particles: u32,
+    /// Current live particle count.
+    pub live_count: u32,
+    /// Bitmask flags for emitter behavior.
+    pub flags: u32,
+    /// Spawn rate in particles per second.
+    pub spawn_rate: f32,
+    /// Time accumulator for spawning.
+    pub spawn_accumulator: f32,
+    /// Random seed for deterministic behavior.
+    pub seed: u32,
+    /// Space/plane selection for spawned particles.
+    pub space: ParticleSpace,
+    /// Emitter position in world/view space.
+    pub position: Vec3,
+    /// Padding for alignment.
+    pub _padding: f32,
+    /// Base emission direction.
+    pub direction: Vec3,
+    /// Spread angle in radians.
+    pub spread: f32,
+    /// Start color for spawned particles.
+    pub start_color: Vec4,
+    /// End color for spawned particles.
+    pub end_color: Vec4,
+    /// Start size (xy).
+    pub start_size: Vec2,
+    /// End size (xy).
+    pub end_size: Vec2,
+    /// Lifetime range (min, max).
+    pub lifetime_range: Vec2,
+    /// Speed range (min, max).
+    pub speed_range: Vec2,
+    /// Rotation range (min, max).
+    pub rotation_range: Vec2,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct Light {
