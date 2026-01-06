@@ -22,6 +22,7 @@ use reservations::{
     bindless_textures::ReservedBindlessTextures, particles::ReservedParticles,
     bindless_transformations::ReservedBindlessTransformations,
     bindless_vertices::ReservedBindlessVertices,
+    per_obj_joints::ReservedPerObjJoints,
 };
 use std::{collections::HashMap, ptr::NonNull};
 use tare::transient::BindlessTextureRegistry;
@@ -289,7 +290,7 @@ impl DefaultState {
 ///////////////////////////////////////////////////////////
 ///
 
-const BINDLESS_STATE_NAMES: [&str; 16] = [
+const BINDLESS_STATE_NAMES: [&str; 17] = [
     "meshi_timing",
     "meshi_bindless_cameras",
     "meshi_bindless_textures",
@@ -306,8 +307,9 @@ const BINDLESS_STATE_NAMES: [&str; 16] = [
     "meshi_bindless_vertices",
     "meshi_bindless_indices",
     "meshi_particles",
+    "meshi_per_obj_joints",
 ];
-const BINDLESS_METADATA: [ReservedMetadata; 16] = [
+const BINDLESS_METADATA: [ReservedMetadata; 17] = [
     ReservedMetadata {
         name: "meshi_timing",
         kind: BindTableVariableType::Uniform,
@@ -370,6 +372,10 @@ const BINDLESS_METADATA: [ReservedMetadata; 16] = [
     },
     ReservedMetadata {
         name: "meshi_particles",
+        kind: BindTableVariableType::Storage,
+    },
+    ReservedMetadata {
+        name: "meshi_per_obj_joints",
         kind: BindTableVariableType::Storage,
     },
 ];
@@ -449,6 +455,10 @@ impl BindlessState {
         reserved.insert(
             names[15].to_string(),
             Box::new(ReservedParticles::new(ctx)),
+        );
+        reserved.insert(
+            names[16].to_string(),
+            Box::new(ReservedPerObjJoints::new(ctx)),
         );
 
         Self {

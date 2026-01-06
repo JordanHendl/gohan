@@ -490,7 +490,7 @@ mod tests {
             .iter()
             .map(|v| (v.set, v.kind.var_type))
             .collect();
-        assert_eq!(vertex_sets.len(), 6);
+        assert_eq!(vertex_sets.len(), 7);
         assert!(vertex_sets.contains(&(0, dashi::BindTableVariableType::Storage)));
         assert!(vertex_sets.contains(&(1, dashi::BindTableVariableType::Storage)));
 

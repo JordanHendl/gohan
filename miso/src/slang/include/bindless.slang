@@ -71,6 +71,10 @@ struct AnimationState {
   uint3 _padding;
 };
 
+struct PerObjectJointTransform {
+  column_major float4x4 transform;
+};
+
 // BINDLESS VARIABLES (match furikake's reserved bindless state)
 uniform Texture2D meshi_bindless_textures[] : register(t0, space0);
 uniform SamplerState meshi_bindless_samplers[] : register(s1, space0);
@@ -88,6 +92,7 @@ uniform StructuredBuffer<AnimationState> meshi_bindless_skinning : register(t11,
 uniform ByteAddressBuffer meshi_bindless_vertices[] : register(t12, space0);
 uniform StructuredBuffer<uint> meshi_bindless_indices : register(t13, space0);
 uniform StructuredBuffer<ParticleState> meshi_particles : register(t14, space0);
+uniform StructuredBuffer<PerObjectJointTransform> meshi_per_obj_joints : register(t15, space0);
 
 // HELPERS
 float4 sample_texture(uint idx, float2 coords) {

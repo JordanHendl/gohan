@@ -257,6 +257,12 @@ pub struct JointTransform {
 
 #[repr(C, align(16))]
 #[derive(Clone, Copy, Default)]
+pub struct PerObjectJointTransform {
+    pub transform: Mat4,
+}
+
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Default)]
 pub struct AnimationClip {
     /// Total duration of the clip in seconds.
     pub duration: f32,

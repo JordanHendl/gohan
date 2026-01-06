@@ -53,6 +53,11 @@ Handle skeleton_handle_from_state(AnimationState state) {
 }
 
 float4x4 joint_skin_matrix(uint joint_index) {
+    if (per_obj.per_obj_joints_id.valid()) {
+        const uint base = (uint)per_obj.per_obj_joints_id.id();
+        return meshi_per_obj_joints[base + joint_index].transform;
+    }
+
     const JointTransform joint = meshi_bindless_joints[joint_index];
     return mul(joint.bind_pose, joint.inverse_bind);
 }
