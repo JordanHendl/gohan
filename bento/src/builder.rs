@@ -555,6 +555,43 @@ impl PSOBuilder {
                     ..self
                 };
             }
+
+            let compiler = Compiler::new().unwrap();
+            return Self {
+                #[cfg(debug_assertions)]
+                fragment: Some(
+                    compiler
+                        .compile(
+                            bytes,
+                            &Request {
+                                name: None,
+                                lang: ShaderLang::Infer,
+                                stage: ShaderType::Fragment,
+                                optimization: OptimizationLevel::None,
+                                debug_symbols: true,
+                                defines: HashMap::new(),
+                            },
+                        )
+                        .unwrap(),
+                ),
+                #[cfg(not(debug_assertions))]
+                fragment: Some(
+                    compiler
+                        .compile(
+                            bytes,
+                            &Request {
+                                name: None,
+                                lang: ShaderLang::Infer,
+                                stage: ShaderType::Fragment,
+                                optimization: OptimizationLevel::Performance,
+                                debug_symbols: false,
+                                defines: HashMap::new(),
+                            },
+                        )
+                        .unwrap(),
+                ),
+                ..self
+            };
         }
 
         self
