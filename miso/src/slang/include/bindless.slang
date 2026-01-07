@@ -68,7 +68,9 @@ struct AnimationState {
   float start_time;
   float playback_rate;
   uint looping;
-  uint3 _padding;
+  uint _padding1;
+  uint _padding2;
+  uint _padding3;
 };
 
 struct PerObjectJointTransform {

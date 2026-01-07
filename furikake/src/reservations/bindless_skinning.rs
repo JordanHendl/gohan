@@ -99,3 +99,12 @@ impl ReservedItem for ReservedBindlessSkinning {
         self
     }
 }
+
+mod test {
+    #[test]
+    fn ensure_size_of_state() {
+        use crate::types::*;
+
+        assert_eq!(std::mem::size_of::<AnimationState>(), 32);
+    }
+}
