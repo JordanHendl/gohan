@@ -401,14 +401,19 @@ impl Compiler {
             resolved_lang,
         )?;
         let variables = reflected.variables;
-        let rewritten_for_metadata = if request.debug_symbols {
-            rewrite_spirv_binding_names(&spirv, &variables, &reflected.remap)
+        let (metadata_spirv, final_spirv) = if request.debug_symbols {
+            match rewrite_spirv_binding_names(&spirv, &variables, &reflected.remap) {
+                Ok(rewritten) => (rewritten.clone(), rewritten),
+                Err(_) => (reflection_spirv.clone(), spirv.clone()),
+            }
         } else {
-            rewrite_spirv_binding_names(&reflection_spirv, &variables, &reflected.remap)
-        }
-        .unwrap_or_else(|_| reflection_spirv.clone());
-        let metadata = reflect_metadata(spirv_words_to_bytes(&rewritten_for_metadata))?;
-        let spirv = rewritten_for_metadata;
+            match rewrite_spirv_binding_names(&reflection_spirv, &variables, &reflected.remap) {
+                Ok(rewritten) => (rewritten.clone(), rewritten),
+                Err(_) => (reflection_spirv.clone(), reflection_spirv.clone()),
+            }
+        };
+        let metadata = reflect_metadata(spirv_words_to_bytes(&metadata_spirv))?;
+        let spirv = final_spirv;
 
         Ok(CompilationResult {
             name: request.name.clone(),
