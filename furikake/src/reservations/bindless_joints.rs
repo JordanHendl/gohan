@@ -3,14 +3,14 @@
 use std::ptr::NonNull;
 
 use dashi::{
-    cmd::Executable, BufferInfo, BufferUsage, CommandStream, Context, Handle, IndexedBindingInfo,
-    IndexedResource, ShaderResource,
+    BufferInfo, BufferUsage, CommandStream, Context, Handle, IndexedBindingInfo, IndexedResource,
+    ShaderResource, cmd::Executable,
 };
 use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::JointTransform};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessJoints {
     ctx: NonNull<Context>,
@@ -96,5 +96,15 @@ impl ReservedItem for ReservedBindlessJoints {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+}
+
+mod test {
+    #[test]
+    fn ensure_size_of_joint() {
+        use crate::types::JointTransform;
+
+        assert_eq!(std::mem::size_of::<glam::Mat4>(), 64);
+        assert_eq!(std::mem::size_of::<JointTransform>(), 144);
     }
 }
