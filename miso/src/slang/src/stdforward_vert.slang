@@ -53,41 +53,24 @@ Handle skeleton_handle_from_state(AnimationState state) {
 }
 
 float4x4 joint_skin_matrix(uint joint_index) {
-    if (per_obj.per_obj_joints_id.valid()) {
-        const uint base = (uint)per_obj.per_obj_joints_id.id();
-        return meshi_per_obj_joints[base + joint_index].transform;
-    }
-
-    const JointTransform joint = meshi_bindless_joints[joint_index];
-    return mul(joint.bind_pose, joint.inverse_bind);
+    const uint base = (uint)per_obj.per_obj_joints_id.id();
+    return meshi_per_obj_joints[base + joint_index].transform;
 }
 
 float4x4 skinning_matrix(uint4 joints, float4 weights) {
+    if (!per_obj.per_obj_joints_id.valid()) {
+        return identity_matrix();
+    }
+
     const float weight_sum = weights.x + weights.y + weights.z + weights.w;
     if (weight_sum <= 0.0) {
         return identity_matrix();
     }
-
-    Handle skeleton_handle = per_obj.skeleton_id;
-    if (per_obj.animation_state_id.valid()) {
-        const AnimationState state = meshi_bindless_skinning[per_obj.animation_state_id.id()];
-        const Handle state_skeleton = skeleton_handle_from_state(state);
-        if (state_skeleton.valid()) {
-            skeleton_handle = state_skeleton;
-        }
-    }
-
-    if (!skeleton_handle.valid()) {
-        return identity_matrix();
-    }
-
-    const SkeletonHeader skeleton = meshi_bindless_skeletons[skeleton_handle.id()];
-    const uint base = skeleton.joint_offset;
     float4x4 skin = float4x4(0.0);
-    skin += weights.x * joint_skin_matrix(base + joints.x);
-    skin += weights.y * joint_skin_matrix(base + joints.y);
-    skin += weights.z * joint_skin_matrix(base + joints.z);
-    skin += weights.w * joint_skin_matrix(base + joints.w);
+    skin += weights.x * joint_skin_matrix(joints.x);
+    skin += weights.y * joint_skin_matrix(joints.y);
+    skin += weights.z * joint_skin_matrix(joints.z);
+    skin += weights.w * joint_skin_matrix(joints.w);
     return skin;
 }
 
