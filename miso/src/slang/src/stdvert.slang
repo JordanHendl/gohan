@@ -82,7 +82,7 @@ float4x4 skinning_matrix(uint4 joints, float4 weights) {
     }
 
     const SkeletonHeader skeleton = meshi_bindless_skeletons[skeleton_handle.id()];
-    const uint base = skeleton.joint_offset;
+    const uint base = 0;
     float4x4 skin = float4x4(0.0);
     skin += weights.x * joint_skin_matrix(base + joints.x);
     skin += weights.y * joint_skin_matrix(base + joints.y);
