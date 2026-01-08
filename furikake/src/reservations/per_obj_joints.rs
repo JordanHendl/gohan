@@ -139,7 +139,8 @@ impl ReservedItem for ReservedPerObjJoints {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.joints.sync_up().end())
+       // Ok(self.joints.sync_up().end())
+       Ok(CommandStream::new().begin().end())
     }
 
     fn binding(&self) -> ReservedBinding {
