@@ -37,7 +37,9 @@ struct SkeletonHeader {
 
 struct JointTransform {
   int parent_index;
-  uint3 _padding;
+    uint _padding0;
+    uint _padding1;
+    uint _padding2;
   column_major float4x4 bind_pose;
   column_major float4x4 inverse_bind;
 };
@@ -58,7 +60,9 @@ struct AnimationTrack {
 
 struct AnimationKeyframe {
   float time;
-  float3 _padding;
+  float _padding0;
+  float _padding1;
+  float _padding2;
   float4 value;
 };
 

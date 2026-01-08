@@ -100,11 +100,15 @@ impl ReservedItem for ReservedBindlessJoints {
 }
 
 mod test {
+    use crate::types::{AnimationClip, AnimationKeyframe};
+
     #[test]
     fn ensure_size_of_joint() {
         use crate::types::JointTransform;
 
         assert_eq!(std::mem::size_of::<glam::Mat4>(), 64);
         assert_eq!(std::mem::size_of::<JointTransform>(), 144);
+        assert_eq!(std::mem::size_of::<AnimationKeyframe>(), 32);
+        assert_eq!(std::mem::size_of::<AnimationClip>(), 16);
     }
 }
