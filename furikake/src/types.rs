@@ -465,9 +465,11 @@ pub struct Material {
     pub _padding1: u32,
 }
 
-pub const MATERIAL_FLAG_VERTEX_COLOR: u16 = 1 << 0;
-pub const MATERIAL_FLAG_UNLIT: u16 = 1 << 1;
-pub const MATERIAL_FLAG_TOON: u16 = 1 << 2;
+pub const MATERIAL_FLAG_PBR_NORMAL: u16 = 1 << 0;
+pub const MATERIAL_FLAG_VERTEX_COLOR: u16 = 1 << 1;
+pub const MATERIAL_FLAG_UNLIT: u16 = 1 << 2;
+pub const MATERIAL_FLAG_TOON: u16 = 1 << 3;
+pub const MATERIAL_FLAG_EMISSIVE_ONLY: u16 = 1 << 4;
 
 #[cfg(test)]
 mod tests {

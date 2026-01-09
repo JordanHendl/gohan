@@ -31,9 +31,13 @@ FSOutput main(FSInput input)
     const Material material = meshi_bindless_materials[per_obj.material_id.id()];
 
     const bool use_vertex_color = (material.material_flags & MATERIAL_FLAG_VERTEX_COLOR) != 0;
+    const bool use_emissive = (material.material_flags & MATERIAL_FLAG_EMISSIVE_ONLY) != 0;
     float4 base_color = input.color;
-    if (!use_vertex_color && valid_texture(material.base_color_texture_id)) {
-        base_color = sample_texture(material.base_color_texture_id, input.tex_coords);
+    if (!use_vertex_color) {
+        const uint texture_id = use_emissive ? material.emissive_texture_id : material.base_color_texture_id;
+        if(valid_texture(texture_id)) {
+          base_color = sample_texture(texture_id, input.tex_coords);
+        }
     }
 
     const float3 n = normalize(input.world_normal);
