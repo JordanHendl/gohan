@@ -30,8 +30,9 @@ FSOutput main(FSInput input)
     FSOutput output;
     const Material material = meshi_bindless_materials[per_obj.material_id.id()];
 
+    const bool use_vertex_color = (material.material_flags & MATERIAL_FLAG_VERTEX_COLOR) != 0;
     float4 base_color = input.color;
-    if (valid_texture(material.base_color_texture_id)) {
+    if (!use_vertex_color && valid_texture(material.base_color_texture_id)) {
         base_color = sample_texture(material.base_color_texture_id, input.tex_coords);
     }
 
@@ -43,6 +44,7 @@ FSOutput main(FSInput input)
     output.position = float4(input.world_pos, 1.0);
     output.albedo = base_color;
     output.normal = float4(ortho_normal, 1.0);
-    output.material_code = float4(float(per_obj.material_id.id()), 0.0, 0.0, 1.0);
+    output.material_code =
+        float4(float(per_obj.material_id.id()), float(material.material_flags), 0.0, 1.0);
     return output;
 }

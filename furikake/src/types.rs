@@ -459,9 +459,15 @@ pub struct Material {
     pub metallic_roughness_texture_id: u16,
     pub occlusion_texture_id: u16,
     pub emissive_texture_id: u16,
+    /// Bitmask of material features (see MATERIAL_FLAG_* constants).
+    pub material_flags: u16,
     pub render_mask: u16,
     pub _padding: u16,
 }
+
+pub const MATERIAL_FLAG_VERTEX_COLOR: u16 = 1 << 0;
+pub const MATERIAL_FLAG_UNLIT: u16 = 1 << 1;
+pub const MATERIAL_FLAG_TOON: u16 = 1 << 2;
 
 #[cfg(test)]
 mod tests {

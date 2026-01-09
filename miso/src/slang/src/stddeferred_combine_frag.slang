@@ -23,14 +23,26 @@ struct FSOutput {
   float4 material_code = sample_texture(material_id, int2(input.svpos.xy));
 
   float depth_factor = saturate(1.0 / (1.0 + length(position.xyz)));
-  float material_scale = 1.0 + (material_code * 0.001);
+  float material_scale = 1.0 + (material_code.x * 0.001);
+  uint material_flags = uint(material_code.y + 0.5);
+  bool is_unlit = (material_flags & MATERIAL_FLAG_UNLIT) != 0;
+  bool is_toon = (material_flags & MATERIAL_FLAG_TOON) != 0;
   float3 lighting = albedo.rgb * (0.2 + depth_factor);
   const Light light = meshi_bindless_lights[0];
   if (light.valid()) {;
     float3 light_dir = normalize(-light.direction());
     float ndotl = max(dot(normal, light_dir), 0.0);
+    if (is_toon) {
+      const float toon_steps = 4.0;
+      ndotl = floor(ndotl * toon_steps) / toon_steps;
+    }
     lighting = albedo.rgb * light.color() * light.intensity() * ndotl *
                material_scale;
+  }
+
+  if (is_unlit) {
+    output.color = float4(albedo.rgb, 1.0);
+    return output;
   }
 
   if (material_id != 1.0) {

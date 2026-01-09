@@ -77,6 +77,8 @@ fn compile_shader() -> bento::CompilationResult {
             uint metallic_roughness_texture_id;
             uint occlusion_texture_id;
             uint emissive_texture_id;
+            uint material_flags;
+            uint render_mask;
             uint _padding;
         };
         layout(set = 4, binding = 0) buffer Materials {

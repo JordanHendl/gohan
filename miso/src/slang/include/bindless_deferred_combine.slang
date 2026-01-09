@@ -8,6 +8,7 @@ struct Material {
   uint metallic_roughness_texture_id;
   uint occlusion_texture_id;
   uint emissive_texture_id;
+  uint material_flags;
   uint render_mask;
   uint _padding;
 };

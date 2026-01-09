@@ -40,9 +40,18 @@ FSOutput main(FSInput input)
     FSOutput output;
     const Material material = meshi_bindless_materials[per_obj.material_id.id()];
 
+    const bool use_vertex_color = (material.material_flags & MATERIAL_FLAG_VERTEX_COLOR) != 0;
+    const bool is_unlit = (material.material_flags & MATERIAL_FLAG_UNLIT) != 0;
+    const bool is_toon = (material.material_flags & MATERIAL_FLAG_TOON) != 0;
+
     float4 base_color = input.color;
-    if (valid_texture(material.base_color_texture_id)) {
+    if (!use_vertex_color && valid_texture(material.base_color_texture_id)) {
         base_color = sample_texture(material.base_color_texture_id, input.tex_coords);
+    }
+
+    if (is_unlit) {
+        output.color = base_color;
+        return output;
     }
 
     const float3 normal = resolve_normal(material, input);
@@ -51,6 +60,10 @@ FSOutput main(FSInput input)
     if (light.valid()) {
         float3 light_dir = normalize(-light.direction());
         float ndotl = max(dot(normal, light_dir), 0.0);
+        if (is_toon) {
+            const float toon_steps = 4.0;
+            ndotl = floor(ndotl * toon_steps) / toon_steps;
+        }
         lighting += base_color.rgb * light.color() * light.intensity() * ndotl;
     }
 
