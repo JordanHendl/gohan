@@ -101,5 +101,6 @@ VSOutput main(VSInput input)
     output.color = input.color;
     output.world_tangent = float4(world_tangent, input.tangent.w);
 
+    output.position.y = -output.position.y;
     return output;
 }

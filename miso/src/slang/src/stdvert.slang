@@ -101,6 +101,7 @@ VSOutput main(VSInput input)
     output.tex_coords = input.tex_coords;
     output.color = input.color;
     output.world_tangent = float4(world_tangent, input.tangent.w);
-
+    
+    output.position.y = -output.position.y;
     return output;
 }
