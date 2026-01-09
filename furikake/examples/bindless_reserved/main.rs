@@ -172,14 +172,14 @@ fn main() {
     let emissive_texture =
         make_solid_texture(&mut ctx, "bindless_reserved_emissive", [255, 0, 255, 255]);
 
-    let mut texture_ids = [0u16; 5];
+    let mut texture_ids = [0u32; 5];
     state
         .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-            texture_ids[0] = textures.add_texture(base_texture);
-            texture_ids[1] = textures.add_texture(normal_texture);
-            texture_ids[2] = textures.add_texture(roughness_texture);
-            texture_ids[3] = textures.add_texture(occlusion_texture);
-            texture_ids[4] = textures.add_texture(emissive_texture);
+            texture_ids[0] = textures.add_texture(base_texture) as u32;
+            texture_ids[1] = textures.add_texture(normal_texture) as u32;
+            texture_ids[2] = textures.add_texture(roughness_texture) as u32;
+            texture_ids[3] = textures.add_texture(occlusion_texture) as u32;
+            texture_ids[4] = textures.add_texture(emissive_texture) as u32;
         })
         .expect("add bindless textures");
 
@@ -292,8 +292,8 @@ fn main() {
     let mut updated_ids = (texture_ids[0], texture_ids[1]);
     state
         .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-            updated_ids.0 = textures.add_texture(updated_base);
-            updated_ids.1 = textures.add_texture(updated_normal);
+            updated_ids.0 = textures.add_texture(updated_base) as u32;
+            updated_ids.1 = textures.add_texture(updated_normal) as u32;
         })
         .expect("allocate updated textures");
 

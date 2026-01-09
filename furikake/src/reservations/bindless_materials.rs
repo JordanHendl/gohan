@@ -98,3 +98,14 @@ impl ReservedItem for ReservedBindlessMaterials {
         self
     }
 }
+
+mod test {
+    use crate::types::*;
+
+    #[test]
+    fn ensure_size_of_material() {
+        use crate::types::JointTransform;
+
+        assert_eq!(std::mem::size_of::<Material>(), 32);
+    }
+}

@@ -454,15 +454,15 @@ impl Default for Light {
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Material {
-    pub base_color_texture_id: u16,
-    pub normal_texture_id: u16,
-    pub metallic_roughness_texture_id: u16,
-    pub occlusion_texture_id: u16,
-    pub emissive_texture_id: u16,
+    pub base_color_texture_id: u32,
+    pub normal_texture_id: u32,
+    pub metallic_roughness_texture_id: u32,
+    pub occlusion_texture_id: u32,
+    pub emissive_texture_id: u32,
     /// Bitmask of material features (see MATERIAL_FLAG_* constants).
-    pub material_flags: u16,
-    pub render_mask: u16,
-    pub _padding: u16,
+    pub material_flags: u32,
+    pub render_mask: u32,
+    pub _padding1: u32,
 }
 
 pub const MATERIAL_FLAG_VERTEX_COLOR: u16 = 1 << 0;

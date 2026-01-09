@@ -78,14 +78,14 @@ fn mutates_all_bindless_reservations_across_frames() {
         let occlusion_view = make_dummy_texture(&mut ctx, "bindless_state_occlusion");
         let emissive_view = make_dummy_texture(&mut ctx, "bindless_state_emissive");
 
-        let mut ids = [0u16; 5];
+        let mut ids = [0u32; 5];
         state
             .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-                ids[0] = textures.add_texture(base_view);
-                ids[1] = textures.add_texture(normal_view);
-                ids[2] = textures.add_texture(roughness_view);
-                ids[3] = textures.add_texture(occlusion_view);
-                ids[4] = textures.add_texture(emissive_view);
+                ids[0] = textures.add_texture(base_view) as u32;
+                ids[1] = textures.add_texture(normal_view) as u32;
+                ids[2] = textures.add_texture(roughness_view) as u32;
+                ids[3] = textures.add_texture(occlusion_view) as u32;
+                ids[4] = textures.add_texture(emissive_view) as u32;
             })
             .expect("allocate bindless textures");
 
@@ -174,12 +174,12 @@ fn mutates_all_bindless_reservations_across_frames() {
     let (updated_base_tex, updated_normal_tex) = {
         let updated_base_view = make_dummy_texture(&mut ctx, "bindless_state_base_updated");
         let updated_normal_view = make_dummy_texture(&mut ctx, "bindless_state_normal_updated");
-        let mut ids = (0u16, 0u16);
+        let mut ids = (0u32, 0u32);
         state
             .reserved_mut::<ReservedBindlessTextures, _>("meshi_bindless_textures", |textures| {
-                ids.0 = textures.add_texture(updated_base_view);
-                ids.1 = textures.add_texture(updated_normal_view);
-            })
+                ids.0 = textures.add_texture(updated_base_view) as u32;
+                ids.1 = textures.add_texture(updated_normal_view) as u32;
+             })
             .expect("allocate updated textures");
         ids
     };

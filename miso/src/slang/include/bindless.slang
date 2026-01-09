@@ -11,7 +11,7 @@ struct Material {
   uint emissive_texture_id;
   uint material_flags;
   uint render_mask;
-  uint _padding;
+  uint _padding1;
 };
 
 struct Camera {
