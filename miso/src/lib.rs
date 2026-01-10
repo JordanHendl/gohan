@@ -149,6 +149,46 @@ pub fn gpudeferred(defines: &[String]) -> Vec<CompilationResult> {
     vec![vertex, fragment]
 }
 
+pub fn gpuforward(defines: &[String]) -> Vec<CompilationResult> {
+    let vshader =
+        resolve_with_includes!("src/slang/src/gpuforward_vert.slang", "-Isrc/slang/include/");
+    let fshader =
+        resolve_with_includes!("src/slang/src/gpuforward_frag.slang", "-Isrc/slang/include/");
+    let define_map = build_define_map(defines);
+
+    let compiler = Compiler::new().expect("Failed to create shader compiler");
+    let base_request = Request {
+        name: Some("gpu-forward".to_string()),
+        lang: ShaderLang::Slang,
+        stage: dashi::ShaderType::Vertex,
+        optimization: OptimizationLevel::Performance,
+        debug_symbols: true,
+        defines: define_map,
+    };
+
+    let vertex = compiler
+        .compile(
+            vshader.as_bytes(),
+            &Request {
+                stage: dashi::ShaderType::Vertex,
+                ..base_request.clone()
+            },
+        )
+        .expect("Failed to compile gpu forward vertex shader");
+
+    let fragment = compiler
+        .compile(
+            fshader.as_bytes(),
+            &Request {
+                stage: dashi::ShaderType::Fragment,
+                ..base_request
+            },
+        )
+        .expect("Failed to compile gpu forward fragment shader");
+
+    vec![vertex, fragment]
+}
+
 pub fn stdforward(defines: &[String]) -> Vec<CompilationResult> {
     let vshader = resolve_with_includes!(
         "src/slang/src/stdforward_vert.slang",

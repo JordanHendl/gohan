@@ -1,5 +1,5 @@
 use bento::{InterfaceVariable, ShaderVariable, VertexLayout};
-use miso::{stddeferred, stddeferred_combine, stdforward};
+use miso::{gpuforward, stddeferred, stddeferred_combine, stdforward};
 
 fn print_interface(label: &str, variables: &[InterfaceVariable]) {
     println!("{label}:");
@@ -147,8 +147,43 @@ pub fn print_stdforward() {
     }
 }
 
+pub fn print_gpuforward() {
+    let defines: Vec<String> = std::env::args().skip(1).collect();
+    let shaders = gpuforward(&defines);
+
+    println!(
+        "Compiled {} shader(s) via miso::gpuforward with defines: {:?}\n",
+        shaders.len(),
+        defines
+    );
+
+    for shader in shaders {
+        println!("==============================");
+        println!("Stage: {:?}", shader.stage);
+        println!("Language: {:?}", shader.lang);
+        println!("Name: {:?}", shader.name);
+        println!("Source file: {:?}", shader.file);
+        println!("Entry points: {:?}", shader.metadata.entry_points);
+
+        if let Some(size) = shader.metadata.workgroup_size {
+            println!("Workgroup size: {:?}", size);
+        }
+
+        print_interface("Inputs", &shader.metadata.inputs);
+        print_interface("Outputs", &shader.metadata.outputs);
+        print_bindings(&shader.variables);
+
+        if let Some(vertex) = &shader.metadata.vertex {
+            print_vertex_layout(vertex);
+        }
+
+        println!();
+    }
+}
+
 fn main() {
     print_stddeferred();
     print_stddeferred_combine();
     print_stdforward();
+    print_gpuforward();
 }
