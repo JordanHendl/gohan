@@ -446,7 +446,12 @@ mod tests {
         let results = gpudeferred(&[]);
 
         assert_eq!(results.len(), 2);
-        assert!(results.iter().any(|r| r.stage == dashi::ShaderType::Vertex));
+        let vertex = results
+            .iter()
+            .find(|r| r.stage == dashi::ShaderType::Vertex)
+            .expect("vertex stage missing");
+        assert!(vertex.metadata.inputs.is_empty());
+        assert!(vertex.metadata.vertex.is_none());
         assert!(results
             .iter()
             .any(|r| r.stage == dashi::ShaderType::Fragment));

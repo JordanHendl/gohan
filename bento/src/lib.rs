@@ -1,6 +1,10 @@
 pub mod builder;
 pub mod error;
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
 use regex::Regex;
 use rspirv::{
@@ -1116,6 +1120,7 @@ fn reflect_metadata(spirv_bytes: &[u8]) -> Result<ShaderMetadata, BentoError> {
     }
 
     let mut locations = HashMap::new();
+    let mut builtins = HashSet::new();
     for instruction in &module.annotations {
         if instruction.class.opcode == spirv::Op::Decorate {
             if let (
@@ -1130,6 +1135,19 @@ fn reflect_metadata(spirv_bytes: &[u8]) -> Result<ShaderMetadata, BentoError> {
                 if *decoration == spirv::Decoration::Location {
                     let id = *id;
                     locations.insert(id, *location);
+                }
+            }
+            if let (
+                Some(rspirv_reflect::rspirv::dr::Operand::IdRef(id)),
+                Some(rspirv_reflect::rspirv::dr::Operand::Decoration(decoration)),
+                Some(rspirv_reflect::rspirv::dr::Operand::BuiltIn(_)),
+            ) = (
+                instruction.operands.get(0),
+                instruction.operands.get(1),
+                instruction.operands.get(2),
+            ) {
+                if *decoration == spirv::Decoration::BuiltIn {
+                    builtins.insert(*id);
                 }
             }
         }
@@ -1229,7 +1247,11 @@ fn reflect_metadata(spirv_bytes: &[u8]) -> Result<ShaderMetadata, BentoError> {
         };
 
         match storage_class {
-            spirv::StorageClass::Input => inputs.push(variable),
+            spirv::StorageClass::Input => {
+                if !builtins.contains(&id) {
+                    inputs.push(variable);
+                }
+            }
             spirv::StorageClass::Output => outputs.push(variable),
             _ => {}
         }
