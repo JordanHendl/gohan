@@ -84,7 +84,7 @@ VertexData load_vertex_data(PerDrawData draw, uint vertex_id) {
 
     // draw.vertex_id =  offset to start of mesh vertices
     // vertex_id/input.vertex_id = current vertex id of draw
-    const uint base = draw.vertex_id * vertex_id * VERTEX_STRIDE;
+    const uint base = draw.vertex_id + vertex_id * VERTEX_STRIDE;
 
     data.position = asfloat(vertex_buffer.Load3(base + 0));
     data.normal = asfloat(vertex_buffer.Load3(base + 12));
