@@ -103,7 +103,7 @@ VSOutput main(VSInput input) {
     const PerDrawData draw = per_draw_ssbo[input.instance_id];
     const VertexData vertex = load_vertex_data(draw, input.vertex_id);
 
-    const Camera camera = meshi_bindless_cameras[draw.scene_id.id()];
+    const Camera camera = meshi_bindless_cameras[scene.camera.id()];
     const float4x4 view = view_from_camera(camera);
     const float4x4 view_proj = mul(camera.projection, view);
     const float4x4 model = model_matrix(draw);
