@@ -96,7 +96,7 @@ uniform StructuredBuffer<AnimationClip> meshi_bindless_animations : register(t8,
 uniform StructuredBuffer<AnimationTrack> meshi_bindless_animation_tracks : register(t9, space0);
 uniform StructuredBuffer<AnimationKeyframe> meshi_bindless_animation_keyframes : register(t10, space0);
 uniform StructuredBuffer<AnimationState> meshi_bindless_skinning : register(t11, space0);
-uniform ByteAddressBuffer meshi_bindless_vertices[] : register(t12, space0);
+uniform ByteAddressBuffer meshi_bindless_vertices : register(t12, space0);
 uniform StructuredBuffer<uint> meshi_bindless_indices : register(t13, space0);
 uniform StructuredBuffer<ParticleState> meshi_particles : register(t14, space0);
 uniform StructuredBuffer<PerObjectJointTransform> meshi_per_obj_joints : register(t15, space0);
