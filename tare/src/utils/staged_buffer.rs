@@ -93,6 +93,20 @@ impl StagedBuffer {
         })
     }
 
+    pub fn sync_up_range(&self, offset: u32, amount: u32) -> CommandStream<Recording> {
+        if amount == 0 {
+            return CommandStream::new().begin();
+        }
+
+        CommandStream::new().begin().copy_buffers(&CopyBuffer {
+            src: self.host.handle,
+            dst: self.device.handle,
+            src_offset: offset,
+            dst_offset: offset,
+            amount,
+        })
+    }
+
     pub fn sync_down(&self) -> CommandStream<Recording> {
         CommandStream::new().begin().copy_buffers(&CopyBuffer {
             src: self.device.handle,

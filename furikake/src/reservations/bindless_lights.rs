@@ -9,12 +9,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::Light};
 
-use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
+use super::{DirtyRange, ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessLights {
     ctx: NonNull<Context>,
     data: StagedBuffer,
     available: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessLights {
@@ -38,6 +39,7 @@ impl ReservedBindlessLights {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             data,
             available,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -68,6 +70,7 @@ impl ReservedBindlessLights {
     }
 
     pub fn light_mut(&mut self, handle: Handle<Light>) -> &mut Light {
+        self.dirty.mark_elements::<Light>(handle.slot as usize, 1);
         &mut self.data.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -78,7 +81,11 @@ impl ReservedItem for ReservedBindlessLights {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.data.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.data.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

@@ -10,12 +10,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::SkeletonHeader};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 pub struct ReservedBindlessSkeletons {
     ctx: NonNull<Context>,
     skeletons: StagedBuffer,
     available_skeletons: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessSkeletons {
@@ -38,6 +39,7 @@ impl ReservedBindlessSkeletons {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             skeletons,
             available_skeletons,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -67,6 +69,8 @@ impl ReservedBindlessSkeletons {
     }
 
     pub fn skeleton_mut(&mut self, handle: Handle<SkeletonHeader>) -> &mut SkeletonHeader {
+        self.dirty
+            .mark_elements::<SkeletonHeader>(handle.slot as usize, 1);
         &mut self.skeletons.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -77,7 +81,11 @@ impl ReservedItem for ReservedBindlessSkeletons {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.skeletons.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.skeletons.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

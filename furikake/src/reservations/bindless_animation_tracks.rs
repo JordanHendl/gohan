@@ -10,12 +10,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::AnimationTrack};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 pub struct ReservedBindlessAnimationTracks {
     ctx: NonNull<Context>,
     tracks: StagedBuffer,
     available_tracks: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessAnimationTracks {
@@ -38,6 +39,7 @@ impl ReservedBindlessAnimationTracks {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             tracks,
             available_tracks,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -67,6 +69,8 @@ impl ReservedBindlessAnimationTracks {
     }
 
     pub fn track_mut(&mut self, handle: Handle<AnimationTrack>) -> &mut AnimationTrack {
+        self.dirty
+            .mark_elements::<AnimationTrack>(handle.slot as usize, 1);
         &mut self.tracks.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -77,7 +81,11 @@ impl ReservedItem for ReservedBindlessAnimationTracks {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.tracks.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.tracks.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

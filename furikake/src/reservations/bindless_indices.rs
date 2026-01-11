@@ -10,7 +10,7 @@ use tare::utils::StagedBuffer;
 
 use crate::error::FurikakeError;
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 const INDEX_BUFFER_BYTES: u32 = 8 * 1024 * 1024;
 
@@ -18,6 +18,7 @@ pub struct ReservedBindlessIndices {
     ctx: NonNull<Context>,
     indices: StagedBuffer,
     next_index: u32,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessIndices {
@@ -37,6 +38,7 @@ impl ReservedBindlessIndices {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             indices,
             next_index: 0,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -45,6 +47,8 @@ impl ReservedBindlessIndices {
     }
 
     pub fn indices_mut(&mut self) -> &mut [u32] {
+        let len = self.indices.as_slice::<u32>().len();
+        self.dirty.mark_elements::<u32>(0, len);
         self.indices.as_slice_mut()
     }
 
@@ -57,6 +61,8 @@ impl ReservedBindlessIndices {
         }
         buffer[offset..end].copy_from_slice(data);
         self.next_index = end as u32;
+        self.dirty
+            .mark_elements::<u32>(offset, data.len());
         Some(offset as u32)
     }
 }
@@ -67,7 +73,11 @@ impl ReservedItem for ReservedBindlessIndices {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.indices.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.indices.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

@@ -10,7 +10,7 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::VertexBufferSlot};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 const VERTEX_BUFFER_BYTES: u32 = 16 * 1024 * 1024;
 const VERTEX_BUFFER_SLOT_COUNT: usize = crate::types::VERTEX_BUFFER_SLOT_COUNT;
@@ -24,6 +24,7 @@ pub struct ReservedBindlessVertices {
     ctx: NonNull<Context>,
     buffers: Vec<StagedBuffer>,
     write_offsets: [u32; VERTEX_BUFFER_SLOT_COUNT],
+    dirty: [DirtyRange; VERTEX_BUFFER_SLOT_COUNT],
 }
 
 impl ReservedBindlessVertices {
@@ -48,6 +49,7 @@ impl ReservedBindlessVertices {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             buffers,
             write_offsets: [0; VERTEX_BUFFER_SLOT_COUNT],
+            dirty: std::array::from_fn(|_| DirtyRange::default()),
         }
     }
 
@@ -56,7 +58,10 @@ impl ReservedBindlessVertices {
     }
 
     pub fn buffer_mut(&mut self, slot: VertexBufferSlot) -> &mut StagedBuffer {
-        &mut self.buffers[slot as usize]
+        let index = slot.as_index();
+        let len = self.buffers[index].as_slice::<u8>().len() as u32;
+        self.dirty[index].mark_bytes(0, len);
+        &mut self.buffers[index]
     }
 
     pub fn vertices(&self, slot: VertexBufferSlot) -> &[u8] {
@@ -68,14 +73,18 @@ impl ReservedBindlessVertices {
     }
 
     pub fn push_vertex_bytes(&mut self, slot: VertexBufferSlot, bytes: &[u8]) -> Option<u32> {
-        let offset = self.write_offsets[slot.as_index()] as usize;
-        let buffer = self.buffer_mut(slot).as_slice_mut::<u8>();
+        let index = slot.as_index();
+        let offset = self.write_offsets[index] as usize;
         let end = offset.saturating_add(bytes.len());
-        if end > buffer.len() {
-            return None;
+        {
+            let buffer = self.buffers[index].as_slice_mut::<u8>();
+            if end > buffer.len() {
+                return None;
+            }
+            buffer[offset..end].copy_from_slice(bytes);
         }
-        buffer[offset..end].copy_from_slice(bytes);
-        self.write_offsets[slot.as_index()] = end as u32;
+        self.write_offsets[index] = end as u32;
+        self.dirty[index].mark_bytes(offset as u32, bytes.len() as u32);
         Some(offset as u32)
     }
 }
@@ -87,8 +96,10 @@ impl ReservedItem for ReservedBindlessVertices {
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
         let mut cmd = CommandStream::new().begin();
-        for buffer in &self.buffers {
-            cmd = cmd.combine(buffer.sync_up().end());
+        for (buffer, dirty) in self.buffers.iter().zip(self.dirty.iter_mut()) {
+            if let Some((start, end)) = dirty.take() {
+                cmd = cmd.combine(buffer.sync_up_range(start, end - start).end());
+            }
         }
         Ok(cmd.end())
     }

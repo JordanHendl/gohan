@@ -12,10 +12,12 @@ pub mod bindless_textures;
 pub mod bindless_transformations;
 pub mod bindless_vertices;
 pub mod camera;
+mod dirty;
 pub mod per_obj_joints;
 pub mod particles;
 pub mod timing;
 pub use timing::*;
+pub(crate) use dirty::DirtyRange;
 
 use dashi::{cmd::Executable, CommandStream, Context, IndexedBindingInfo, IndexedResource};
 use std::any::Any;
