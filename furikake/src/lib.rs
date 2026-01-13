@@ -550,6 +550,7 @@ impl BindlessState {
         let resources = std::slice::from_ref(resource);
 
         for target in targets {
+            dbg!("UPDATING TARGET: {:?}", target);
             if resource.slot >= target.size {
                 continue;
             }
