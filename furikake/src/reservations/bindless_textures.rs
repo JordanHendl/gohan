@@ -142,6 +142,14 @@ impl ReservedBindlessTextures {
             .get(texture as usize)
             .cloned()
     }
+
+    pub fn image_resources(&self) -> Vec<IndexedResource> {
+        self.data.borrow().device_image_data.clone()
+    }
+
+    pub fn sampler_resources(&self) -> Vec<IndexedResource> {
+        self.data.borrow().device_sampler_data.clone()
+    }
     
     pub fn remove_texture(&mut self, texture: u16) {
         let mut data = self.data.borrow_mut();
