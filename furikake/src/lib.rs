@@ -496,6 +496,8 @@ impl BindlessState {
                 self.register_table_target(key, target);
             }
         }
+
+        self.backfill_bindless_textures();
     }
 
     pub fn register_cso_tables(&mut self, cso: &CSO) {
@@ -508,6 +510,8 @@ impl BindlessState {
                 self.register_table_target(key, target);
             }
         }
+
+        self.backfill_bindless_textures();
     }
 
     pub fn unregister_table(&mut self, key: &str, target: BindTableUpdateTarget) {
@@ -559,6 +563,22 @@ impl BindlessState {
                 table: target.table,
                 bindings: &bindings,
             });
+        }
+    }
+
+    fn backfill_bindless_textures(&mut self) {
+        let other = unsafe{&mut *(self as *mut BindlessState)};
+        let Ok(textures) =
+            self.reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
+        else {
+            return;
+        };
+
+        for resource in textures.image_resources() {
+            other.update_tables("meshi_bindless_textures", &resource);
+        }
+        for resource in textures.sampler_resources() {
+            other.update_tables("meshi_bindless_samplers", &resource);
         }
     }
 
