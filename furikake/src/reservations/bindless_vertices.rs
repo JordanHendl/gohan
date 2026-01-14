@@ -97,9 +97,10 @@ impl ReservedItem for ReservedBindlessVertices {
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
         let mut cmd = CommandStream::new().begin();
         for (buffer, dirty) in self.buffers.iter().zip(self.dirty.iter_mut()) {
-            if let Some((start, end)) = dirty.take() {
-                cmd = cmd.combine(buffer.sync_up_range(start, end - start).end());
-            }
+            cmd = cmd.combine(buffer.sync_up());
+//            if let Some((start, end)) = dirty.take() {
+//                cmd = cmd.combine(buffer.sync_up_range(start, end - start).end());
+//            }
         }
         Ok(cmd.end())
     }

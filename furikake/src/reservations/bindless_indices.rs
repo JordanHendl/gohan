@@ -75,7 +75,8 @@ impl ReservedItem for ReservedBindlessIndices {
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
         let mut cmd = CommandStream::new().begin();
         if let Some((start, end)) = self.dirty.take() {
-            cmd = cmd.combine(self.indices.sync_up_range(start, end - start).end());
+            //cmd = cmd.combine(self.indices.sync_up_range(start, end - start).end());
+            cmd = cmd.combine(self.indices.sync_up());
         }
         Ok(cmd.end())
     }
