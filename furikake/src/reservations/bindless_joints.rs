@@ -10,12 +10,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::JointTransform};
 
-use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
+use super::{DirtyRange, ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessJoints {
     ctx: NonNull<Context>,
     joints: StagedBuffer,
     available_joints: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessJoints {
@@ -38,6 +39,7 @@ impl ReservedBindlessJoints {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             joints,
             available_joints,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -67,6 +69,8 @@ impl ReservedBindlessJoints {
     }
 
     pub fn joint_mut(&mut self, handle: Handle<JointTransform>) -> &mut JointTransform {
+        self.dirty
+            .mark_elements::<JointTransform>(handle.slot as usize, 1);
         &mut self.joints.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -77,7 +81,11 @@ impl ReservedItem for ReservedBindlessJoints {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.joints.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.joints.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

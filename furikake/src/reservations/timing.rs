@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use crate::error::FurikakeError;
 
-use super::{ReservedBinding, ReservedItem};
+use super::{DirtyRange, ReservedBinding, ReservedItem};
 #[repr(C)]
 struct TimeData {
     current_time_ms: f32,
@@ -16,6 +16,7 @@ struct TimeData {
 pub struct ReservedTiming {
     last_time: Instant,
     buffer: StagedBuffer,
+    dirty: DirtyRange,
 }
 
 impl ReservedTiming {
@@ -30,6 +31,7 @@ impl ReservedTiming {
         Self {
             last_time: Instant::now(),
             buffer,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -54,7 +56,13 @@ impl ReservedItem for ReservedTiming {
         s[0].frame_time_ms = (now - self.last_time).as_secs_f32() * 1000.0;
         self.last_time = now;
 
-        Ok(self.buffer.sync_up().end())
+        self.dirty
+            .mark_elements::<TimeData>(0, self.buffer.as_slice::<TimeData>().len());
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.buffer.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

@@ -10,12 +10,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::AnimationKeyframe};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 pub struct ReservedBindlessAnimationKeyframes {
     ctx: NonNull<Context>,
     keyframes: StagedBuffer,
     available_keyframes: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessAnimationKeyframes {
@@ -39,6 +40,7 @@ impl ReservedBindlessAnimationKeyframes {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             keyframes,
             available_keyframes,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -70,6 +72,8 @@ impl ReservedBindlessAnimationKeyframes {
     }
 
     pub fn keyframe_mut(&mut self, handle: Handle<AnimationKeyframe>) -> &mut AnimationKeyframe {
+        self.dirty
+            .mark_elements::<AnimationKeyframe>(handle.slot as usize, 1);
         &mut self.keyframes.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -80,7 +84,11 @@ impl ReservedItem for ReservedBindlessAnimationKeyframes {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.keyframes.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.keyframes.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {
