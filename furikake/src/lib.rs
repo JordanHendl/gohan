@@ -550,6 +550,7 @@ impl BindlessState {
         let resources = std::slice::from_ref(resource);
 
         for target in targets {
+            dbg!("UPDATING TARGET: {:?}", target);
             if resource.slot >= target.size {
                 continue;
             }
@@ -567,13 +568,13 @@ impl BindlessState {
     }
 
     fn backfill_bindless_textures(&mut self) {
-        let other = unsafe{&mut (*(self as *mut BindlessState))};
+        let other = unsafe{&mut *(self as *mut BindlessState)};
         let Ok(textures) =
             self.reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
         else {
             return;
         };
-        
+
         for resource in textures.image_resources() {
             other.update_tables("meshi_bindless_textures", &resource);
         }
