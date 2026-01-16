@@ -10,12 +10,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::AnimationState};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 pub struct ReservedBindlessSkinning {
     ctx: NonNull<Context>,
     states: StagedBuffer,
     available_states: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessSkinning {
@@ -38,6 +39,7 @@ impl ReservedBindlessSkinning {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             states,
             available_states,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -68,6 +70,8 @@ impl ReservedBindlessSkinning {
     }
 
     pub fn state_mut(&mut self, handle: Handle<AnimationState>) -> &mut AnimationState {
+        self.dirty
+            .mark_elements::<AnimationState>(handle.slot as usize, 1);
         &mut self.states.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -78,7 +82,11 @@ impl ReservedItem for ReservedBindlessSkinning {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.states.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.states.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

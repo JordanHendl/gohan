@@ -10,7 +10,7 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::PerObjectJointTransform};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 #[derive(Clone, Copy, Debug)]
 pub struct PerObjectJointAllocation {
@@ -22,6 +22,7 @@ pub struct ReservedPerObjJoints {
     ctx: NonNull<Context>,
     joints: StagedBuffer,
     free_ranges: Vec<PerObjectJointAllocation>,
+    dirty: DirtyRange,
 }
 
 impl ReservedPerObjJoints {
@@ -46,6 +47,7 @@ impl ReservedPerObjJoints {
                 offset: 0,
                 count: START_JOINTS as u32,
             }],
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -99,6 +101,8 @@ impl ReservedPerObjJoints {
     ) -> &mut [PerObjectJointTransform] {
         let start = allocation.offset as usize;
         let end = start + allocation.count as usize;
+        self.dirty
+            .mark_elements::<PerObjectJointTransform>(start, allocation.count as usize);
         &mut self.joints.as_slice_mut()[start..end]
     }
 
@@ -107,6 +111,9 @@ impl ReservedPerObjJoints {
     }
 
     pub fn joints_mut(&mut self) -> &mut [PerObjectJointTransform] {
+        let len = self.joints.as_slice::<PerObjectJointTransform>().len();
+        self.dirty
+            .mark_elements::<PerObjectJointTransform>(0, len);
         self.joints.as_slice_mut()
     }
 
@@ -139,8 +146,11 @@ impl ReservedItem for ReservedPerObjJoints {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-       // Ok(self.joints.sync_up().end())
-       Ok(CommandStream::new().begin().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.joints.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

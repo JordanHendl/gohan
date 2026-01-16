@@ -9,12 +9,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::Material};
 
-use super::{ReservedBinding, ReservedItem, table_binding_from_indexed};
+use super::{DirtyRange, ReservedBinding, ReservedItem, table_binding_from_indexed};
 
 pub struct ReservedBindlessMaterials {
     ctx: NonNull<Context>,
     data: StagedBuffer,
     available: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedBindlessMaterials {
@@ -37,6 +38,7 @@ impl ReservedBindlessMaterials {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             data,
             available,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -67,6 +69,8 @@ impl ReservedBindlessMaterials {
     }
 
     pub fn material_mut(&mut self, handle: Handle<Material>) -> &mut Material {
+        self.dirty
+            .mark_elements::<Material>(handle.slot as usize, 1);
         &mut self.data.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -77,7 +81,11 @@ impl ReservedItem for ReservedBindlessMaterials {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.data.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.data.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {

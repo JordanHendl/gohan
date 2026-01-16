@@ -8,12 +8,13 @@ use tare::utils::StagedBuffer;
 
 use crate::{error::FurikakeError, types::ParticleState};
 
-use super::{table_binding_from_indexed, ReservedBinding, ReservedItem};
+use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
 pub struct ReservedParticles {
     ctx: NonNull<Context>,
     data: StagedBuffer,
     available: Vec<u16>,
+    dirty: DirtyRange,
 }
 
 impl ReservedParticles {
@@ -37,6 +38,7 @@ impl ReservedParticles {
             ctx: NonNull::new(ctx).expect("NonNull failed check"),
             data,
             available,
+            dirty: DirtyRange::default(),
         }
     }
 
@@ -69,6 +71,8 @@ impl ReservedParticles {
     }
 
     pub fn particle_mut(&mut self, handle: Handle<ParticleState>) -> &mut ParticleState {
+        self.dirty
+            .mark_elements::<ParticleState>(handle.slot as usize, 1);
         &mut self.data.as_slice_mut()[handle.slot as usize]
     }
 }
@@ -79,7 +83,11 @@ impl ReservedItem for ReservedParticles {
     }
 
     fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
-        Ok(self.data.sync_up().end())
+        let mut cmd = CommandStream::new().begin();
+        if let Some((start, end)) = self.dirty.take() {
+            cmd = cmd.combine(self.data.sync_up_range(start, end - start).end());
+        }
+        Ok(cmd.end())
     }
 
     fn binding(&self) -> ReservedBinding {
