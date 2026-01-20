@@ -1,10 +1,10 @@
 use std::ptr::NonNull;
 
+use crate::transient::{BindlessTextureRegistry, TransientAllocator, TransientImage};
 use cmd::{CommandStream, Executable, PendingGraphics, Recording};
+use dashi::gpu::cmd::{Scope, SyncPoint};
 use dashi::{execution::CommandRing, *};
 use driver::command::BeginRenderPass;
-
-use crate::transient::{BindlessTextureRegistry, TransientAllocator, TransientImage};
 
 #[derive(Default, Debug, Clone)]
 pub struct SubpassInfo {
@@ -237,7 +237,6 @@ impl RenderGraph {
                 begin.clear_values[i] = subpass.info.clear_values[i];
             }
 
-
             self.cached_render_passes.push(render_pass);
             self.cached_begins.push(begin);
         }
@@ -270,12 +269,15 @@ impl RenderGraph {
                             let mut stream = CommandStream::new().begin();
                             let mut subpass_stream = stream.begin_render_pass(begin);
                             subpass_stream = (subpass.cb)(subpass_stream);
-                            stream = subpass_stream.stop_drawing();
+                            stream = subpass_stream
+                                .stop_drawing()
+                                .sync(SyncPoint::GraphicsToGraphics, Scope::AllCommonReads);
+
                             stream.end().append(cmd).unwrap();
                         }
                         GraphPass::Compute(compute) => {
                             let stream = CommandStream::new().begin();
-                            let stream = (compute.cb)(stream);
+                            let mut stream = (compute.cb)(stream);
                             stream.append(cmd).unwrap();
                         }
                     }
