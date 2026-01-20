@@ -52,6 +52,7 @@ fn config_dynamic_type(config: &BindTableVariable) -> Option<BindTableVariableTy
         BindTableVariable::WithResources { resources } => resources
             .iter()
             .find_map(|resource| dynamic_type_from_resource(&resource.resource)),
+        BindTableVariable::Dynamic { var_type, .. } => Some(*var_type),
         BindTableVariable::Empty { .. } => None,
     }
 }
@@ -335,6 +336,19 @@ fn resources_from_config(
                 default_resources_for_variable(defaults, ctx, var, name, expected_count)?;
             Ok((defaults, expected_count))
         }
+        BindTableVariable::Dynamic { size, .. } => {
+            if *size != expected_count {
+                return Err(PipelineBuildError::InvalidResourceCount {
+                    name: name.to_string(),
+                    expected: expected_count,
+                    provided: *size,
+                });
+            }
+
+            let defaults =
+                default_resources_for_variable(defaults, ctx, var, name, expected_count)?;
+            Ok((defaults, expected_count))
+        }
         BindTableVariable::WithResources { resources } => {
             if resources.len() != expected_count as usize {
                 return Err(PipelineBuildError::InvalidResourceCount {
@@ -383,6 +397,7 @@ fn resolve_binding_count(
     let count = match config {
         BindTableVariable::Binding { resource: _ } => 1,
         BindTableVariable::Empty { size } => *size,
+        BindTableVariable::Dynamic { size, .. } => *size,
         BindTableVariable::WithResources { resources } => resources.len() as u32,
     };
 
@@ -464,6 +479,67 @@ pub enum BindTableVariable {
     Empty { size: u32 },
     Binding { resource: ShaderResource },
     WithResources { resources: Vec<IndexedResource> },
+    Dynamic { size: u32, var_type: BindTableVariableType },
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum DynamicVariableType {
+    Uniform,
+    Storage,
+}
+
+impl DynamicVariableType {
+    fn to_bind_table_type(self) -> BindTableVariableType {
+        match self {
+            DynamicVariableType::Uniform => BindTableVariableType::DynamicUniform,
+            DynamicVariableType::Storage => BindTableVariableType::DynamicStorage,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct BuilderDebugNames {
+    pipeline: String,
+    layout: String,
+    bind_table_layout: String,
+    bind_table: String,
+}
+
+impl BuilderDebugNames {
+    fn graphics_default() -> Self {
+        Self {
+            pipeline: "bento_graphics_pipeline".to_string(),
+            layout: "bento_graphics_layout".to_string(),
+            bind_table_layout: "bento_bt_layout".to_string(),
+            bind_table: "bento_bind_table".to_string(),
+        }
+    }
+
+    fn compute_default() -> Self {
+        Self {
+            pipeline: "bento_compute_pipeline".to_string(),
+            layout: "bento_compute_layout".to_string(),
+            bind_table_layout: "bento_compute_bt_layout".to_string(),
+            bind_table: "bento_compute_bind_table".to_string(),
+        }
+    }
+
+    fn from_base(name: &str) -> Self {
+        Self {
+            pipeline: format!("{name}_pipeline"),
+            layout: format!("{name}_layout"),
+            bind_table_layout: format!("{name}_bt_layout"),
+            bind_table: format!("{name}_bind_table"),
+        }
+    }
+
+    fn bind_table_layout_name(&self, set: u32) -> String {
+        format!("{}_set{set}", self.bind_table_layout)
+    }
+
+    fn bind_table_name(&self, set: u32) -> String {
+        format!("{}_set{set}", self.bind_table)
+    }
 }
 
 pub struct AttachmentDesc {
@@ -478,6 +554,7 @@ pub struct PSOBuilder {
     table_variables: HashMap<String, BindTableVariable>,
     attachment_formats: HashMap<u32, Format>,
     details: GraphicsPipelineDetails,
+    debug_names: BuilderDebugNames,
 }
 
 impl PSOBuilder {
@@ -489,6 +566,7 @@ impl PSOBuilder {
             attachment_formats: HashMap::new(),
             details: GraphicsPipelineDetails::default(),
             depth: None,
+            debug_names: BuilderDebugNames::graphics_default(),
         }
     }
 
@@ -656,6 +734,29 @@ impl PSOBuilder {
         }
     }
 
+    pub fn add_dynamic_variable(self, key: &str, size: u32, var_type: DynamicVariableType) -> Self {
+        let mut table_variables = self.table_variables;
+        table_variables.insert(
+            key.to_string(),
+            BindTableVariable::Dynamic {
+                size,
+                var_type: var_type.to_bind_table_type(),
+            },
+        );
+
+        Self {
+            table_variables,
+            ..self
+        }
+    }
+
+    pub fn set_debug_name(self, name: &str) -> Self {
+        Self {
+            debug_names: BuilderDebugNames::from_base(name),
+            ..self
+        }
+    }
+
     pub fn set_details(self, details: GraphicsPipelineDetails) -> Self {
         Self { details, ..self }
     }
@@ -678,6 +779,7 @@ impl PSOBuilder {
             attachment_formats,
             details,
             depth,
+            debug_names,
         } = self;
 
         let vertex = vertex.ok_or(PipelineBuildError::MissingShader { stage: "vertex" })?;
@@ -797,9 +899,10 @@ impl PSOBuilder {
                 });
             }
 
+            let layout_name = debug_names.bind_table_layout_name(set);
             let layout =
                 ctx.make_bind_table_layout(&BindTableLayoutInfo {
-                    debug_name: "bento_bt_layout",
+                    debug_name: layout_name.as_str(),
                     shaders: shader_infos.as_slice(),
                 })
                 .map_err(|source| {
@@ -850,9 +953,10 @@ impl PSOBuilder {
                     })
                     .collect();
 
+                let table_name = debug_names.bind_table_name(set);
                 let table = ctx
                     .make_bind_table(&BindTableInfo {
-                        debug_name: "bento_bind_table",
+                        debug_name: table_name.as_str(),
                         layout,
                         bindings: indexed_bindings.as_slice(),
                         set,
@@ -923,7 +1027,7 @@ impl PSOBuilder {
         let sample_count = details.sample_count.clone();
         let layout = ctx
             .make_graphics_pipeline_layout(&GraphicsPipelineLayoutInfo {
-                debug_name: "bento_graphics_layout",
+                debug_name: debug_names.layout.as_str(),
                 vertex_info,
                 bt_layouts,
                 shaders: shader_infos.as_slice(),
@@ -978,7 +1082,7 @@ impl PSOBuilder {
                     depth_sample,
                 },
                 subpass_id: 0,
-                debug_name: "bento_graphics_pipeline",
+                debug_name: debug_names.pipeline.as_str(),
             })
             .map_err(|source| PipelineBuildError::PipelineCreateFailed {
                 pipeline: "graphics",
@@ -1053,6 +1157,7 @@ impl CSO {
 pub struct CSOBuilder {
     shader: Option<CompilationResult>,
     table_variables: HashMap<String, BindTableVariable>,
+    debug_names: BuilderDebugNames,
 }
 
 impl CSOBuilder {
@@ -1060,6 +1165,7 @@ impl CSOBuilder {
         Self {
             shader: None,
             table_variables: HashMap::new(),
+            debug_names: BuilderDebugNames::compute_default(),
         }
     }
 
@@ -1161,11 +1267,35 @@ impl CSOBuilder {
         }
     }
 
+    pub fn add_dynamic_variable(self, key: &str, size: u32, var_type: DynamicVariableType) -> Self {
+        let mut table_variables = self.table_variables;
+        table_variables.insert(
+            key.to_string(),
+            BindTableVariable::Dynamic {
+                size,
+                var_type: var_type.to_bind_table_type(),
+            },
+        );
+
+        Self {
+            table_variables,
+            ..self
+        }
+    }
+
+    pub fn set_debug_name(self, name: &str) -> Self {
+        Self {
+            debug_names: BuilderDebugNames::from_base(name),
+            ..self
+        }
+    }
+
     // Will fail if shaders are not given, or if variables given do not
     pub fn build(self, ctx: &mut dashi::Context) -> Result<CSO, BentoError> {
         let CSOBuilder {
             shader,
             table_variables,
+            debug_names,
         } = self;
 
         let shader = shader.ok_or(PipelineBuildError::MissingShader { stage: "compute" })?;
@@ -1223,9 +1353,10 @@ impl CSOBuilder {
                 variables: vars.as_slice(),
             };
 
+            let layout_name = debug_names.bind_table_layout_name(set);
             let layout =
                 ctx.make_bind_table_layout(&BindTableLayoutInfo {
-                    debug_name: "bento_compute_bt_layout",
+                    debug_name: layout_name.as_str(),
                     shaders: std::slice::from_ref(&shader_info),
                 })
                 .map_err(|source| {
@@ -1272,9 +1403,10 @@ impl CSOBuilder {
                     })
                     .collect();
 
+                let table_name = debug_names.bind_table_name(set);
                 let table = ctx
                     .make_bind_table(&BindTableInfo {
-                        debug_name: "bento_compute_bind_table",
+                        debug_name: table_name.as_str(),
                         layout,
                         bindings: indexed_bindings.as_slice(),
                         set,
@@ -1314,7 +1446,7 @@ impl CSOBuilder {
 
         let pipeline = ctx
             .make_compute_pipeline(&ComputePipelineInfo {
-                debug_name: "bento_compute_pipeline",
+                debug_name: debug_names.pipeline.as_str(),
                 layout,
             })
             .map_err(|source| PipelineBuildError::PipelineCreateFailed {
