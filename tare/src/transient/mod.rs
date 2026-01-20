@@ -215,6 +215,7 @@ impl TransientAllocator {
         };
         let id = unsafe { (registry.add)(registry.ctx, view) };
 
+        println!("REGISTERING NEW IMAGE {}", id);
         self.bindless_image_ids.insert(handle, id);
         Some(id)
     }
