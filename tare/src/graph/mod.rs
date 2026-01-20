@@ -271,7 +271,7 @@ impl RenderGraph {
                             subpass_stream = (subpass.cb)(subpass_stream);
                             stream = subpass_stream
                                 .stop_drawing()
-                                .sync(SyncPoint::GraphicsToGraphics, Scope::AllCommonReads);
+                                .sync(SyncPoint::GraphicsToGraphics, Scope::All);
 
                             stream.end().append(cmd).unwrap();
                         }
