@@ -810,26 +810,55 @@ fn parse_source_bindings(source: &str, lang: ShaderLang) -> Result<Vec<SourceBin
 }
 
 fn parse_glsl_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
-    let regex = Regex::new(r"layout\s*\(\s*set\s*=\s*(\d+)\s*,\s*binding\s*=\s*(\d+)\s*\)")
-        .map_err(|e| {
-            BentoError::ShaderCompilation(format!("Invalid GLSL reflection regex: {e}"))
-        })?;
+    let regex = Regex::new(r"layout\s*\(\s*([^)]+)\)\s*").map_err(|e| {
+        BentoError::ShaderCompilation(format!("Invalid GLSL reflection regex: {e}"))
+    })?;
 
     let mut bindings = Vec::new();
 
-    for (index, captures) in regex.captures_iter(source).enumerate() {
-        let set = captures
+    for captures in regex.captures_iter(source) {
+        let qualifiers = captures
             .get(1)
-            .and_then(|m| m.as_str().parse::<u32>().ok())
-            .ok_or_else(|| {
-                BentoError::ShaderCompilation("Missing GLSL descriptor set index".into())
-            })?;
-        let binding = captures
-            .get(2)
-            .and_then(|m| m.as_str().parse::<u32>().ok())
-            .ok_or_else(|| {
-                BentoError::ShaderCompilation("Missing GLSL descriptor binding index".into())
-            })?;
+            .map(|m| m.as_str())
+            .unwrap_or_default();
+        let mut set = None;
+        let mut binding = None;
+
+        for qualifier in qualifiers.split(',') {
+            let trimmed = qualifier.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+
+            let Some((key, value)) = trimmed.split_once('=') else {
+                continue;
+            };
+            let key = key.trim();
+            let value = value.trim();
+
+            match key {
+                "set" => {
+                    set = Some(value.parse::<u32>().map_err(|_| {
+                        BentoError::ShaderCompilation(
+                            "Missing GLSL descriptor set index".into(),
+                        )
+                    })?);
+                }
+                "binding" => {
+                    binding = Some(value.parse::<u32>().map_err(|_| {
+                        BentoError::ShaderCompilation(
+                            "Missing GLSL descriptor binding index".into(),
+                        )
+                    })?);
+                }
+                _ => {}
+            }
+        }
+
+        let Some(binding) = binding else {
+            continue;
+        };
+        let set = set.unwrap_or_default();
         let declaration_start = captures.get(0).map(|m| m.end()).ok_or_else(|| {
             BentoError::ShaderCompilation("Missing GLSL binding declaration".into())
         })?;
@@ -852,7 +881,7 @@ fn parse_glsl_bindings(source: &str) -> Result<Vec<SourceBinding>, BentoError> {
             set,
             binding: Some(binding),
             name,
-            order: index,
+            order: bindings.len(),
         });
     }
 
@@ -1567,6 +1596,44 @@ layout(set = 0, binding = 6) uniform SceneCamera {
 
         assert_eq!(names_by_binding.get(&5), Some(&"camera".to_string()));
         assert_eq!(names_by_binding.get(&6), Some(&"SceneCamera".to_string()));
+
+        Ok(())
+    }
+
+    #[test]
+    fn glsl_parses_layout_qualifiers_with_bindings() -> Result<(), BentoError> {
+        let source = r#"
+layout(std140, set = 1, binding = 2) uniform SceneCamera {
+    uint slot;
+} camera;
+
+layout(binding = 3, scalar, set = 2) buffer SceneData {
+    uint slot;
+} scene_data;
+
+layout(binding = 4) uniform sampler2D albedo_texture;
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+"#;
+
+        let bindings = parse_glsl_bindings(source)?;
+        let mut names_by_binding = HashMap::new();
+        let mut sets_by_binding = HashMap::new();
+        for binding in bindings {
+            let binding_index = binding.binding.unwrap_or_default();
+            names_by_binding.insert(binding_index, binding.name);
+            sets_by_binding.insert(binding_index, binding.set);
+        }
+
+        assert_eq!(names_by_binding.get(&2), Some(&"camera".to_string()));
+        assert_eq!(names_by_binding.get(&3), Some(&"scene_data".to_string()));
+        assert_eq!(
+            names_by_binding.get(&4),
+            Some(&"albedo_texture".to_string())
+        );
+        assert_eq!(sets_by_binding.get(&2), Some(&1));
+        assert_eq!(sets_by_binding.get(&3), Some(&2));
+        assert_eq!(sets_by_binding.get(&4), Some(&0));
 
         Ok(())
     }
