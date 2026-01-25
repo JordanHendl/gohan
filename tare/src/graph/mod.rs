@@ -1,6 +1,4 @@
 use std::ptr::NonNull;
-use std::mem;
-use std::thread;
 
 use crate::transient::{BindlessTextureRegistry, TransientAllocator, TransientImage};
 use cmd::{CommandStream, Executable, PendingGraphics, Recording};
@@ -49,11 +47,11 @@ impl TransientAllocatorOwner {
 
 struct StoredSubpass {
     info: SubpassInfo,
-    cb: Box<dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics> + Send>,
+    cb: Box<dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics>>,
 }
 
 struct StoredComputePass {
-    cb: Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable> + Send>,
+    cb: Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable>>,
 }
 
 enum GraphPass {
@@ -131,16 +129,13 @@ impl RenderGraph {
     where
         F: FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics>,
     {
-        let cb: Box<dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics>> =
-            Box::new(cb);
         let cb = unsafe {
-            mem::transmute::<
-                Box<dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics>>,
-                Box<
-                    dyn FnMut(CommandStream<PendingGraphics>) -> CommandStream<PendingGraphics>
-                        + Send,
-                >,
-            >(cb)
+            let raw: *mut F = Box::into_raw(Box::new(cb));
+            Box::from_raw(
+                raw as *mut dyn FnMut(
+                    CommandStream<PendingGraphics>,
+                ) -> CommandStream<PendingGraphics>,
+            )
         };
         self.passes.push(GraphPass::Render(StoredSubpass {
             info: info.clone(),
@@ -154,15 +149,11 @@ impl RenderGraph {
     where
         F: FnMut(CommandStream<Recording>) -> CommandStream<Executable>,
     {
-        let cb: Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable>> =
-            Box::new(cb);
         let cb = unsafe {
-            mem::transmute::<
-                Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable>>,
-                Box<
-                    dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable> + Send,
-                >,
-            >(cb)
+            let raw: *mut F = Box::into_raw(Box::new(cb));
+            Box::from_raw(
+                raw as *mut dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable>,
+            )
         };
         self.passes
             .push(GraphPass::Compute(StoredComputePass { cb }));
@@ -265,46 +256,31 @@ impl RenderGraph {
             return;
         };
 
-        let mut render_index = 0;
-        let passes = std::mem::take(&mut self.passes);
-        let mut handles = Vec::with_capacity(passes.len());
-
-        for pass in passes {
-            match pass {
-                GraphPass::Render(mut subpass) => {
-                    let begin = begin_entries
-                        .get(render_index)
-                        .cloned()
-                        .expect("begin entry should exist for every render pass");
-                    render_index += 1;
-                    handles.push(thread::spawn(move || {
-                        let mut stream = CommandStream::new().begin();
-                        let mut subpass_stream = stream.begin_render_pass(&begin);
-                        subpass_stream = (subpass.cb)(subpass_stream);
-                        stream = subpass_stream
-                            .stop_drawing()
-                            .sync(SyncPoint::GraphicsToGraphics, Scope::All);
-                        stream.end()
-                    }));
-                }
-                GraphPass::Compute(mut compute) => {
-                    handles.push(thread::spawn(move || {
-                        let stream = CommandStream::new().begin();
-                        (compute.cb)(stream)
-                    }));
-                }
-            }
-        }
-
-        let mut streams = Vec::with_capacity(handles.len());
-        for handle in handles {
-            streams.push(handle.join().expect("Render graph pass thread panicked"));
-        }
+        let mut begin_iter = begin_entries.iter();
 
         self.ring
-            .record(move |cmd| {
-                for stream in streams.drain(..) {
-                    stream.append(cmd).unwrap();
+            .record(|cmd| {
+                for pass in self.passes.iter_mut() {
+                    match pass {
+                        GraphPass::Render(subpass) => {
+                            let begin = begin_iter
+                                .next()
+                                .expect("begin entry should exist for every render pass");
+                            let mut stream = CommandStream::new().begin();
+                            let mut subpass_stream = stream.begin_render_pass(begin);
+                            subpass_stream = (subpass.cb)(subpass_stream);
+                            stream = subpass_stream
+                                .stop_drawing()
+                                .sync(SyncPoint::GraphicsToGraphics, Scope::All);
+
+                            stream.end().append(cmd).unwrap();
+                        }
+                        GraphPass::Compute(compute) => {
+                            let stream = CommandStream::new().begin();
+                            let mut stream = (compute.cb)(stream);
+                            stream.append(cmd).unwrap();
+                        }
+                    }
                 }
             })
             .expect("Failed to record render graph commands");
