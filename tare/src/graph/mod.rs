@@ -1,8 +1,9 @@
 use std::ptr::NonNull;
 use std::mem;
-use std::thread;
+use std::panic;
 
 use crate::transient::{BindlessTextureRegistry, TransientAllocator, TransientImage};
+use crate::utils::ThreadPool;
 use cmd::{CommandStream, Executable, PendingGraphics, Recording};
 use dashi::gpu::cmd::{Scope, SyncPoint};
 use dashi::{execution::CommandRing, *};
@@ -23,6 +24,7 @@ pub struct RenderGraph {
     passes: Vec<GraphPass>,
     cached_render_passes: Vec<Handle<RenderPass>>,
     cached_begins: Vec<BeginRenderPass>,
+    thread_pool: ThreadPool,
 }
 
 enum TransientAllocatorOwner {
@@ -101,6 +103,7 @@ impl RenderGraph {
             passes: Vec::new(),
             cached_render_passes: Vec::new(),
             cached_begins: Vec::new(),
+            thread_pool: ThreadPool::new(),
         }
     }
 
@@ -268,6 +271,7 @@ impl RenderGraph {
         let mut render_index = 0;
         let passes = std::mem::take(&mut self.passes);
         let mut handles = Vec::with_capacity(passes.len());
+        self.thread_pool.ensure_workers(passes.len());
 
         for pass in passes {
             match pass {
@@ -277,7 +281,7 @@ impl RenderGraph {
                         .cloned()
                         .expect("begin entry should exist for every render pass");
                     render_index += 1;
-                    handles.push(thread::spawn(move || {
+                    handles.push(self.thread_pool.execute(move || {
                         let mut stream = CommandStream::new().begin();
                         let mut subpass_stream = stream.begin_render_pass(&begin);
                         subpass_stream = (subpass.cb)(subpass_stream);
@@ -288,7 +292,7 @@ impl RenderGraph {
                     }));
                 }
                 GraphPass::Compute(mut compute) => {
-                    handles.push(thread::spawn(move || {
+                    handles.push(self.thread_pool.execute(move || {
                         let stream = CommandStream::new().begin();
                         (compute.cb)(stream)
                     }));
@@ -298,7 +302,13 @@ impl RenderGraph {
 
         let mut streams = Vec::with_capacity(handles.len());
         for handle in handles {
-            streams.push(handle.join().expect("Render graph pass thread panicked"));
+            let result = handle
+                .recv()
+                .expect("Render graph pass thread result channel closed");
+            match result {
+                Ok(stream) => streams.push(stream),
+                Err(err) => panic::resume_unwind(err),
+            }
         }
 
         self.ring
