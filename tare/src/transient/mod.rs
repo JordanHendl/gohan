@@ -136,15 +136,22 @@ struct ReuseEntry<H> {
     age: usize,
 }
 
+#[derive(Clone, Copy)]
+struct ImageReuseEntry {
+    handle: Handle<Image>,
+    age: usize,
+    bindless_id: Option<u16>,
+}
+
 const MAX_FRAMES: usize = 3;
 const UNUSED_RETIRE_THRESHOLD: usize = MAX_FRAMES * 12;
 pub struct TransientAllocator {
     ctx: NonNull<Context>,
-    images: Ring<Vec<(ImageKey, Handle<Image>)>, MAX_FRAMES>,
+    images: Ring<Vec<(ImageKey, Handle<Image>, Option<u16>)>, MAX_FRAMES>,
     buffers: Ring<Vec<(BufferKey, Handle<Buffer>)>, MAX_FRAMES>,
     renderpasses: Ring<Vec<(u64, Handle<RenderPass>)>, MAX_FRAMES>,
     semaphores: Ring<Vec<Handle<Semaphore>>, MAX_FRAMES>,
-    available_images: HashMap<ImageKey, Vec<ReuseEntry<Handle<Image>>>>,
+    available_images: HashMap<ImageKey, Vec<ImageReuseEntry>>,
     available_buffers: HashMap<BufferKey, Vec<ReuseEntry<Handle<Buffer>>>>,
     available_renderpasses: HashMap<u64, Vec<ReuseEntry<Handle<RenderPass>>>>,
     available_semaphores: Vec<ReuseEntry<Handle<Semaphore>>>,
@@ -233,13 +240,14 @@ impl TransientAllocator {
     fn check_for_stale(&mut self) {
         let stale_index = (self.images.current() + 1) % MAX_FRAMES;
 
-        for (key, img) in self.images.get_mut(stale_index).drain(..) {
+        for (key, img, bindless_id) in self.images.get_mut(stale_index).drain(..) {
             self.available_images
                 .entry(key)
                 .or_default()
-                .push(ReuseEntry {
+                .push(ImageReuseEntry {
                     handle: img,
                     age: 0,
+                    bindless_id,
                 });
         }
 
@@ -359,30 +367,33 @@ impl TransientAllocator {
             .images
             .data()
             .iter()
-            .map(|(_, handle)| *handle)
+            .map(|(_, handle, _)| *handle)
             .collect();
-        let handle = self
+        let (handle, bindless_id) = self
             .available_images
             .get_mut(&key)
             .and_then(|list| {
                 list.iter()
                     .rposition(|entry| !in_use.contains(&entry.handle))
-                    .map(|index| list.swap_remove(index).handle)
+                    .map(|index| {
+                        let entry = list.swap_remove(index);
+                        (entry.handle, entry.bindless_id)
+                    })
             })
             .unwrap_or_else(|| {
-                unsafe { self.ctx.as_mut() }
+                let handle = unsafe { self.ctx.as_mut() }
                     .make_image(info)
-                    .expect("Make transient image")
+                    .expect("Make transient image");
+                let bindless_id = self.register_bindless_texture(handle);
+                (handle, bindless_id)
             });
 
-        self.images.data_mut().push((key, handle));
+        self.images.data_mut().push((key, handle, bindless_id));
 
         let view = ImageView {
             img: handle,
             ..Default::default()
         };
-        let bindless_id = self.register_bindless_texture(handle);
-
         TransientImage { view, bindless_id }
     }
 
@@ -497,7 +508,7 @@ impl Drop for TransientAllocator {
         let ctx = unsafe { self.ctx.as_mut() };
 
         let mut handles = Vec::new();
-        for (_, img) in self.images.data.iter_mut().flatten() {
+        for (_, img, _) in self.images.data.iter_mut().flatten() {
             handles.push(*img);
         }
         for handle in handles {
