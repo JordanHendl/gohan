@@ -11,6 +11,7 @@ use driver::command::BeginRenderPass;
 
 #[derive(Default, Debug, Clone)]
 pub struct SubpassInfo {
+    pub name: Option<String>,
     pub viewport: Viewport,
     pub color_attachments: [Option<ImageView>; 8],
     pub depth_attachment: Option<ImageView>,
@@ -276,15 +277,25 @@ impl RenderGraph {
         for pass in passes {
             match pass {
                 GraphPass::Render(mut subpass) => {
+                    let subpass_index = render_index;
                     let begin = begin_entries
                         .get(render_index)
                         .cloned()
                         .expect("begin entry should exist for every render pass");
                     render_index += 1;
+                    let label = subpass
+                        .info
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| format!("subpass-{subpass_index}"));
+                    let start_label = format!("subpass start: {label}");
+                    let end_label = format!("subpass end: {label}");
                     handles.push(self.thread_pool.execute(move || {
                         let mut stream = CommandStream::new().begin();
                         let mut subpass_stream = stream.begin_render_pass(&begin);
+                        subpass_stream = subpass_stream.debug_label(&start_label);
                         subpass_stream = (subpass.cb)(subpass_stream);
+                        subpass_stream = subpass_stream.debug_label(&end_label);
                         stream = subpass_stream
                             .stop_drawing()
                             .sync(SyncPoint::GraphicsToGraphics, Scope::All);
