@@ -1045,6 +1045,7 @@ impl PSOBuilder {
             .iter()
             .map(|iv| {
                 if let Some(format) = attachment_formats.get(&idx).copied() {
+                    idx += 1;
                     return format;
                 }
 
