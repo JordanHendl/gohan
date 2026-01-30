@@ -196,6 +196,17 @@ impl Pipeline {
                         "ShaderType::All cannot be used to build a pipeline".into(),
                     ));
                 }
+                dashi::ShaderType::TessellationControl => todo!(),
+                dashi::ShaderType::TessellationEvaluation => todo!(),
+                dashi::ShaderType::Geometry => todo!(),
+                dashi::ShaderType::Task => todo!(),
+                dashi::ShaderType::Mesh => todo!(),
+                dashi::ShaderType::RayGeneration => todo!(),
+                dashi::ShaderType::AnyHit => todo!(),
+                dashi::ShaderType::ClosestHit => todo!(),
+                dashi::ShaderType::Miss => todo!(),
+                dashi::ShaderType::Intersection => todo!(),
+                dashi::ShaderType::Callable => todo!(),
             }
         }
 
@@ -439,6 +450,7 @@ fn shader_stage(stage: dashi::ShaderType) -> Result<ShaderKind, BentoError> {
         dashi::ShaderType::All => Err(BentoError::InvalidInput(
             "ShaderType::All is not supported for compilation".into(),
         )),
+        _ => todo!(),
     }
 }
 
