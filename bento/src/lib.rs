@@ -640,7 +640,7 @@ fn reflect_bindings(
                 }
                 DescriptorType::SAMPLED_IMAGE => dashi::BindTableVariableType::Image,
                 DescriptorType::SAMPLER => dashi::BindTableVariableType::Sampler,
-                DescriptorType::STORAGE_IMAGE => dashi::BindTableVariableType::StorageImage,
+                DescriptorType::STORAGE_IMAGE => dashi::BindTableVariableType::Image,
                 DescriptorType::COMBINED_IMAGE_SAMPLER => {
                     dashi::BindTableVariableType::SampledImage
                 }
