@@ -21,7 +21,7 @@ pub struct ReservedBindlessCamera {
 
 impl ReservedBindlessCamera {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_SIZE: usize = 512;
+        const START_SIZE: usize = 2048;
 
         let available: Vec<u16> = (0..START_SIZE as u16).collect();
         let data = StagedBuffer::new(

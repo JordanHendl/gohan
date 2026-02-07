@@ -19,7 +19,7 @@ pub struct ReservedParticles {
 
 impl ReservedParticles {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_SIZE: usize = 8192;
+        const START_SIZE: usize = 16384;
 
         let available: Vec<u16> = (0..START_SIZE as u16).collect();
         let start = vec![ParticleState::default(); START_SIZE];

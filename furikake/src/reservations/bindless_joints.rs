@@ -21,7 +21,7 @@ pub struct ReservedBindlessJoints {
 
 impl ReservedBindlessJoints {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_JOINTS: usize = 8192;
+        const START_JOINTS: usize = 16384;
 
         let available_joints: Vec<u16> = (0..START_JOINTS as u16).collect();
         let joints = StagedBuffer::new(

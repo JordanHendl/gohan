@@ -21,7 +21,7 @@ pub struct ReservedBindlessAnimations {
 
 impl ReservedBindlessAnimations {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_CLIPS: usize = 512;
+        const START_CLIPS: usize = 2048;
 
         let available_clips: Vec<u16> = (0..START_CLIPS as u16).collect();
         let clips = StagedBuffer::new(

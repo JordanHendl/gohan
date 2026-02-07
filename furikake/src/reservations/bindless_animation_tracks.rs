@@ -21,7 +21,7 @@ pub struct ReservedBindlessAnimationTracks {
 
 impl ReservedBindlessAnimationTracks {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_TRACKS: usize = 4096;
+        const START_TRACKS: usize = 8192;
 
         let available_tracks: Vec<u16> = (0..START_TRACKS as u16).collect();
         let tracks = StagedBuffer::new(

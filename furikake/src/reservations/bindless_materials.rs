@@ -20,7 +20,7 @@ pub struct ReservedBindlessMaterials {
 
 impl ReservedBindlessMaterials {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_SIZE: usize = 1024;
+        const START_SIZE: usize = 4096;
 
         let available: Vec<u16> = (0..START_SIZE as u16).collect();
         let data = StagedBuffer::new(

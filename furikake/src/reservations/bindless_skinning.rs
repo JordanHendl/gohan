@@ -21,7 +21,7 @@ pub struct ReservedBindlessSkinning {
 
 impl ReservedBindlessSkinning {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_STATES: usize = 2048;
+        const START_STATES: usize = 4096;
 
         let available_states: Vec<u16> = (0..START_STATES as u16).collect();
         let states = StagedBuffer::new(

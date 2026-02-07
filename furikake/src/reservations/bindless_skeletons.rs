@@ -21,7 +21,7 @@ pub struct ReservedBindlessSkeletons {
 
 impl ReservedBindlessSkeletons {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_SKELETONS: usize = 512;
+        const START_SKELETONS: usize = 2048;
 
         let available_skeletons: Vec<u16> = (0..START_SKELETONS as u16).collect();
         let skeletons = StagedBuffer::new(

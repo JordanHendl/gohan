@@ -12,7 +12,7 @@ use crate::{error::FurikakeError, types::VertexBufferSlot};
 
 use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
-const VERTEX_BUFFER_BYTES: u32 = 16 * 1024 * 1024;
+const VERTEX_BUFFER_BYTES: u32 = 64 * 1024 * 1024;
 const VERTEX_BUFFER_SLOT_COUNT: usize = crate::types::VERTEX_BUFFER_SLOT_COUNT;
 
 const VERTEX_BUFFER_NAMES: [&str; VERTEX_BUFFER_SLOT_COUNT] = [

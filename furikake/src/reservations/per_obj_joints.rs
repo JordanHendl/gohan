@@ -27,7 +27,7 @@ pub struct ReservedPerObjJoints {
 
 impl ReservedPerObjJoints {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_JOINTS: usize = 16_384;
+        const START_JOINTS: usize = 32_768;
 
         let joints = StagedBuffer::new(
             ctx,

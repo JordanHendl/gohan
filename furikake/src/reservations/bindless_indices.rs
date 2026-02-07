@@ -12,7 +12,7 @@ use crate::error::FurikakeError;
 
 use super::{table_binding_from_indexed, DirtyRange, ReservedBinding, ReservedItem};
 
-const INDEX_BUFFER_BYTES: u32 = 8 * 1024 * 1024;
+const INDEX_BUFFER_BYTES: u32 = 32 * 1024 * 1024;
 
 pub struct ReservedBindlessIndices {
     ctx: NonNull<Context>,

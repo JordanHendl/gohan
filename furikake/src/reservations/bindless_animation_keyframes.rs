@@ -21,7 +21,7 @@ pub struct ReservedBindlessAnimationKeyframes {
 
 impl ReservedBindlessAnimationKeyframes {
     pub fn new(ctx: &mut Context) -> Self {
-        const START_KEYFRAMES: usize = 16384;
+        const START_KEYFRAMES: usize = 32768;
 
         let available_keyframes: Vec<u16> = (0..START_KEYFRAMES as u16).collect();
         let keyframes = StagedBuffer::new(
