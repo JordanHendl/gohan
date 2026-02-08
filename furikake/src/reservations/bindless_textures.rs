@@ -26,7 +26,7 @@ struct BindlessTextureData {
 
 impl BindlessTextureData {
     fn new(ctx: &mut Context) -> Self {
-        const START_SIZE: usize = 4096;
+        const START_SIZE: usize = 8069;
 
         let mut d_image_data = Vec::with_capacity(START_SIZE);
         let mut d_sampler_data = Vec::with_capacity(START_SIZE);
