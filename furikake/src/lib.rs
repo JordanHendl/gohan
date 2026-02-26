@@ -13,15 +13,21 @@ use dashi::{
 
 use error::FurikakeError;
 use reservations::{
-    ReservedItem, ReservedTiming, bindless_animation_keyframes::ReservedBindlessAnimationKeyframes,
+    ReservedItem, ReservedTiming,
+    bindless_animation_keyframes::ReservedBindlessAnimationKeyframes,
     bindless_animation_tracks::ReservedBindlessAnimationTracks,
-    bindless_animations::ReservedBindlessAnimations, bindless_camera::ReservedBindlessCamera,
-    bindless_indices::ReservedBindlessIndices, bindless_joints::ReservedBindlessJoints,
-    bindless_lights::ReservedBindlessLights, bindless_materials::ReservedBindlessMaterials,
-    bindless_skeletons::ReservedBindlessSkeletons, bindless_skinning::ReservedBindlessSkinning,
-    bindless_textures::ReservedBindlessTextures, particles::ReservedParticles,
+    bindless_animations::ReservedBindlessAnimations,
+    bindless_camera::ReservedBindlessCamera,
+    bindless_indices::ReservedBindlessIndices,
+    bindless_joints::ReservedBindlessJoints,
+    bindless_lights::ReservedBindlessLights,
+    bindless_materials::ReservedBindlessMaterials,
+    bindless_skeletons::ReservedBindlessSkeletons,
+    bindless_skinning::ReservedBindlessSkinning,
+    bindless_textures::{ReservedBindlessCubemaps, ReservedBindlessTextures},
     bindless_transformations::ReservedBindlessTransformations,
     bindless_vertices::ReservedBindlessVertices,
+    particles::ReservedParticles,
     per_obj_joints::ReservedPerObjJoints,
 };
 use std::{collections::HashMap, ptr::NonNull};
@@ -290,10 +296,11 @@ impl DefaultState {
 ///////////////////////////////////////////////////////////
 ///
 
-const BINDLESS_STATE_NAMES: [&str; 17] = [
+const BINDLESS_STATE_NAMES: [&str; 18] = [
     "meshi_timing",
     "meshi_bindless_cameras",
     "meshi_bindless_textures",
+    "meshi_bindless_cubemaps",
     "meshi_bindless_samplers",
     "meshi_bindless_transformations",
     "meshi_bindless_materials",
@@ -309,7 +316,7 @@ const BINDLESS_STATE_NAMES: [&str; 17] = [
     "meshi_particles",
     "meshi_per_obj_joints",
 ];
-const BINDLESS_METADATA: [ReservedMetadata; 17] = [
+const BINDLESS_METADATA: [ReservedMetadata; 18] = [
     ReservedMetadata {
         name: "meshi_timing",
         kind: BindTableVariableType::Uniform,
@@ -320,6 +327,10 @@ const BINDLESS_METADATA: [ReservedMetadata; 17] = [
     },
     ReservedMetadata {
         name: "meshi_bindless_textures",
+        kind: BindTableVariableType::Image,
+    },
+    ReservedMetadata {
+        name: "meshi_bindless_cubemaps",
         kind: BindTableVariableType::Image,
     },
     ReservedMetadata {
@@ -405,59 +416,58 @@ impl BindlessState {
             Box::new(ReservedBindlessCamera::new(ctx)),
         );
         let textures = ReservedBindlessTextures::new(ctx);
+        let cubemaps = textures.cubemaps();
         let samplers = textures.samplers();
         reserved.insert(names[2].to_string(), Box::new(textures));
-        reserved.insert(names[3].to_string(), Box::new(samplers));
+        reserved.insert(names[3].to_string(), Box::new(cubemaps));
+        reserved.insert(names[4].to_string(), Box::new(samplers));
         reserved.insert(
-            names[4].to_string(),
+            names[5].to_string(),
             Box::new(ReservedBindlessTransformations::new(ctx)),
         );
         reserved.insert(
-            names[5].to_string(),
+            names[6].to_string(),
             Box::new(ReservedBindlessMaterials::new(ctx)),
         );
         reserved.insert(
-            names[6].to_string(),
+            names[7].to_string(),
             Box::new(ReservedBindlessLights::new(ctx)),
         );
         reserved.insert(
-            names[7].to_string(),
+            names[8].to_string(),
             Box::new(ReservedBindlessSkeletons::new(ctx)),
         );
         reserved.insert(
-            names[8].to_string(),
+            names[9].to_string(),
             Box::new(ReservedBindlessJoints::new(ctx)),
         );
         reserved.insert(
-            names[9].to_string(),
+            names[10].to_string(),
             Box::new(ReservedBindlessAnimations::new(ctx)),
         );
         reserved.insert(
-            names[10].to_string(),
+            names[11].to_string(),
             Box::new(ReservedBindlessAnimationTracks::new(ctx)),
         );
         reserved.insert(
-            names[11].to_string(),
+            names[12].to_string(),
             Box::new(ReservedBindlessAnimationKeyframes::new(ctx)),
         );
         reserved.insert(
-            names[12].to_string(),
+            names[13].to_string(),
             Box::new(ReservedBindlessSkinning::new(ctx)),
         );
         reserved.insert(
-            names[13].to_string(),
+            names[14].to_string(),
             Box::new(ReservedBindlessVertices::new(ctx)),
         );
         reserved.insert(
-            names[14].to_string(),
+            names[15].to_string(),
             Box::new(ReservedBindlessIndices::new(ctx)),
         );
+        reserved.insert(names[16].to_string(), Box::new(ReservedParticles::new(ctx)));
         reserved.insert(
-            names[15].to_string(),
-            Box::new(ReservedParticles::new(ctx)),
-        );
-        reserved.insert(
-            names[16].to_string(),
+            names[17].to_string(),
             Box::new(ReservedPerObjJoints::new(ctx)),
         );
 
@@ -567,15 +577,15 @@ impl BindlessState {
     }
 
     fn backfill_bindless_textures(&mut self) {
-        let other = unsafe{&mut *(self as *mut BindlessState)};
-        let Ok(textures) =
-            self.reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
+        let other = unsafe { &mut *(self as *mut BindlessState) };
+        let Ok(textures) = self.reserved::<ReservedBindlessTextures>("meshi_bindless_textures")
         else {
             return;
         };
 
         for resource in textures.image_resources() {
             other.update_tables("meshi_bindless_textures", &resource);
+            other.update_tables("meshi_bindless_cubemaps", &resource);
         }
         for resource in textures.sampler_resources() {
             other.update_tables("meshi_bindless_samplers", &resource);
@@ -635,6 +645,7 @@ impl BindlessTextureRegistry for BindlessState {
 
         if let Some(resource) = image_resource.as_ref() {
             self.update_tables("meshi_bindless_textures", resource);
+            self.update_tables("meshi_bindless_cubemaps", resource);
         }
         if let Some(resource) = sampler_resource.as_ref() {
             self.update_tables("meshi_bindless_samplers", resource);
@@ -655,9 +666,39 @@ impl BindlessTextureRegistry for BindlessState {
 
         if let Some(resource) = image_resource.as_ref() {
             self.update_tables("meshi_bindless_textures", resource);
+            self.update_tables("meshi_bindless_cubemaps", resource);
         }
         if let Some(resource) = sampler_resource.as_ref() {
             self.update_tables("meshi_bindless_samplers", resource);
+        }
+    }
+    fn add_cubemap(&mut self, view: ImageView) -> u16 {
+        let mut id = None;
+        let mut image_resource = None;
+        self.reserved_mut::<ReservedBindlessCubemaps, _>("meshi_bindless_cubemaps", |cubemaps| {
+            let next_id = cubemaps.add_texture(view);
+            image_resource = cubemaps.image_resource(next_id);
+            id = Some(next_id);
+        })
+        .expect("register bindless cubemap in furikake");
+
+        if let Some(resource) = image_resource.as_ref() {
+            self.update_tables("meshi_bindless_cubemaps", resource);
+        }
+
+        id.expect("bindless cubemap id")
+    }
+
+    fn remove_cubemap(&mut self, id: u16) {
+        let mut image_resource = None;
+        self.reserved_mut::<ReservedBindlessCubemaps, _>("meshi_bindless_cubemaps", |cubemaps| {
+            cubemaps.remove_texture(id);
+            image_resource = cubemaps.image_resource(id);
+        })
+        .expect("remove bindless cubemap in furikake");
+
+        if let Some(resource) = image_resource.as_ref() {
+            self.update_tables("meshi_bindless_cubemaps", resource);
         }
     }
 }

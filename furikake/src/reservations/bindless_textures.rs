@@ -3,8 +3,8 @@
 use std::{cell::RefCell, rc::Rc};
 
 use dashi::{
-    cmd::Executable, CommandStream, Context, Handle, ImageInfo, ImageView, IndexedBindingInfo,
-    IndexedResource, Sampler, SamplerInfo, ShaderResource,
+    CommandStream, Context, Handle, ImageInfo, ImageView, IndexedBindingInfo, IndexedResource,
+    Sampler, SamplerInfo, ShaderResource, cmd::Executable,
 };
 
 use crate::{error::FurikakeError, types::Texture};
@@ -114,6 +114,10 @@ pub struct ReservedBindlessSamplers {
     data: Rc<RefCell<BindlessTextureData>>,
 }
 
+pub struct ReservedBindlessCubemaps {
+    data: Rc<RefCell<BindlessTextureData>>,
+}
+
 impl ReservedBindlessTextures {
     pub fn new(ctx: &mut Context) -> Self {
         Self {
@@ -123,6 +127,12 @@ impl ReservedBindlessTextures {
 
     pub fn samplers(&self) -> ReservedBindlessSamplers {
         ReservedBindlessSamplers {
+            data: Rc::clone(&self.data),
+        }
+    }
+
+    pub fn cubemaps(&self) -> ReservedBindlessCubemaps {
+        ReservedBindlessCubemaps {
             data: Rc::clone(&self.data),
         }
     }
@@ -150,7 +160,7 @@ impl ReservedBindlessTextures {
     pub fn sampler_resources(&self) -> Vec<IndexedResource> {
         self.data.borrow().device_sampler_data.clone()
     }
-    
+
     pub fn remove_texture(&mut self, texture: u16) {
         let mut data = self.data.borrow_mut();
         let def_img = data.def.img;
@@ -217,6 +227,54 @@ impl ReservedBindlessTextures {
     }
 }
 
+impl ReservedBindlessCubemaps {
+    pub fn image_resource(&self, texture: u16) -> Option<IndexedResource> {
+        self.data
+            .borrow()
+            .device_image_data
+            .get(texture as usize)
+            .cloned()
+    }
+
+    pub fn add_texture(&mut self, img: ImageView) -> u16 {
+        let mut data = self.data.borrow_mut();
+        if data.available.is_empty() {
+            data.extend();
+        }
+
+        let id = data
+            .available
+            .pop()
+            .expect("bindless cubemap slot after extension");
+
+        if let Some(host) = data.host_texture_data.get_mut(id as usize) {
+            host.img = img;
+            host.sampler = None;
+        }
+
+        if let Some(resource) = data.device_image_data.get_mut(id as usize) {
+            resource.resource = ShaderResource::Image(img);
+        }
+
+        id
+    }
+
+    pub fn remove_texture(&mut self, texture: u16) {
+        let mut data = self.data.borrow_mut();
+        let def_img = data.def.img;
+        if let Some(slot) = data.host_texture_data.get_mut(texture as usize) {
+            slot.img = def_img;
+            slot.sampler = None;
+
+            if let Some(resource) = data.device_image_data.get_mut(texture as usize) {
+                resource.resource = ShaderResource::Image(def_img);
+            }
+
+            data.available.push(texture);
+        }
+    }
+}
+
 impl ReservedItem for ReservedBindlessTextures {
     fn name(&self) -> String {
         "meshi_bindless_textures".to_string()
@@ -257,6 +315,32 @@ impl ReservedItem for ReservedBindlessSamplers {
         table_binding_from_indexed(IndexedBindingInfo {
             resources: &data.device_sampler_data,
             binding: 1,
+        })
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+impl ReservedItem for ReservedBindlessCubemaps {
+    fn name(&self) -> String {
+        "meshi_bindless_cubemaps".to_string()
+    }
+
+    fn update(&mut self) -> Result<CommandStream<Executable>, FurikakeError> {
+        Ok(CommandStream::new().begin().end())
+    }
+
+    fn binding(&self) -> ReservedBinding {
+        let data = self.data.borrow();
+        table_binding_from_indexed(IndexedBindingInfo {
+            resources: &data.device_image_data,
+            binding: 0,
         })
     }
 

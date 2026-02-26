@@ -21,6 +21,8 @@ pub struct TransientImage {
 pub trait BindlessTextureRegistry {
     fn add_texture(&mut self, view: ImageView) -> u16;
     fn remove_texture(&mut self, id: u16);
+    fn add_cubemap(&mut self, view: ImageView) -> u16;
+    fn remove_cubemap(&mut self, id: u16);
 }
 
 #[derive(Clone, Copy)]
@@ -28,6 +30,8 @@ struct BindlessRegistry {
     ctx: *mut (),
     add: unsafe fn(*mut (), ImageView) -> u16,
     remove: unsafe fn(*mut (), u16),
+    add_cubemap: unsafe fn(*mut (), ImageView) -> u16,
+    remove_cubemap: unsafe fn(*mut (), u16),
 }
 
 unsafe fn add_texture_impl<T: BindlessTextureRegistry>(ctx: *mut (), view: ImageView) -> u16 {
@@ -38,6 +42,16 @@ unsafe fn add_texture_impl<T: BindlessTextureRegistry>(ctx: *mut (), view: Image
 unsafe fn remove_texture_impl<T: BindlessTextureRegistry>(ctx: *mut (), id: u16) {
     let registry = unsafe { &mut *(ctx as *mut T) };
     registry.remove_texture(id);
+}
+
+unsafe fn add_cubemap_impl<T: BindlessTextureRegistry>(ctx: *mut (), view: ImageView) -> u16 {
+    let registry = unsafe { &mut *(ctx as *mut T) };
+    registry.add_cubemap(view)
+}
+
+unsafe fn remove_cubemap_impl<T: BindlessTextureRegistry>(ctx: *mut (), id: u16) {
+    let registry = unsafe { &mut *(ctx as *mut T) };
+    registry.remove_cubemap(id);
 }
 
 impl<T: Default, const N: usize> Ring<T, N> {
@@ -159,7 +173,7 @@ pub struct TransientAllocator {
     free_buffers: Vec<Handle<Buffer>>,
     free_renderpasses: Vec<Handle<RenderPass>>,
     free_semaphores: Vec<Handle<Semaphore>>,
-    global_images: HashMap<Handle<Image>, Option<u16>>,
+    global_images: HashMap<Handle<Image>, (Option<u16>, bool)>,
     bindless_registry: Option<BindlessRegistry>,
     bindless_image_ids: HashMap<Handle<Image>, u16>,
 }
@@ -204,10 +218,12 @@ impl TransientAllocator {
             ctx: registry as *mut T as *mut (),
             add: add_texture_impl::<T>,
             remove: remove_texture_impl::<T>,
+            add_cubemap: add_cubemap_impl::<T>,
+            remove_cubemap: remove_cubemap_impl::<T>,
         });
     }
 
-    fn register_bindless_texture(&mut self, handle: Handle<Image>) -> Option<u16> {
+    fn register_bindless_image(&mut self, handle: Handle<Image>, cubemap: bool) -> Option<u16> {
         let registry = self.bindless_registry?;
         if let Some(existing) = self.bindless_image_ids.get(&handle) {
             return Some(*existing);
@@ -222,20 +238,28 @@ impl TransientAllocator {
             aspect,
             ..Default::default()
         };
-        let id = unsafe { (registry.add)(registry.ctx, view) };
+        let id = if cubemap {
+            unsafe { (registry.add_cubemap)(registry.ctx, view) }
+        } else {
+            unsafe { (registry.add)(registry.ctx, view) }
+        };
 
         self.bindless_image_ids.insert(handle, id);
         Some(id)
     }
 
-    fn unregister_bindless_texture(&mut self, handle: Handle<Image>) {
+    fn unregister_bindless_image(&mut self, handle: Handle<Image>, cubemap: bool) {
         let Some(registry) = self.bindless_registry else {
             return;
         };
         let Some(id) = self.bindless_image_ids.remove(&handle) else {
             return;
         };
-        unsafe { (registry.remove)(registry.ctx, id) };
+        if cubemap {
+            unsafe { (registry.remove_cubemap)(registry.ctx, id) };
+        } else {
+            unsafe { (registry.remove)(registry.ctx, id) };
+        }
     }
 
     // Helper function to check for stale data and remove it.
@@ -344,7 +368,7 @@ impl TransientAllocator {
 
         let handles: Vec<_> = self.free_images.drain(..).collect();
         for handle in handles {
-            self.unregister_bindless_texture(handle);
+            self.unregister_bindless_image(handle, false);
             ctx.destroy_image(handle);
         }
         for handle in self.free_buffers.drain(..) {
@@ -389,7 +413,7 @@ impl TransientAllocator {
                 let handle = unsafe { self.ctx.as_mut() }
                     .make_image(info)
                     .expect("Make transient image");
-                let bindless_id = self.register_bindless_texture(handle);
+                let bindless_id = self.register_bindless_image(handle, false);
                 (handle, bindless_id)
             });
 
@@ -513,8 +537,23 @@ impl TransientAllocator {
         let handle = unsafe { self.ctx.as_mut() }
             .make_image(info)
             .expect("Make global image");
-        let bindless_id = self.register_bindless_texture(handle);
-        self.global_images.insert(handle, bindless_id);
+        let bindless_id = self.register_bindless_image(handle, false);
+        self.global_images.insert(handle, (bindless_id, false));
+
+        let view = ImageView {
+            img: handle,
+            ..Default::default()
+        };
+
+        TransientImage { view, bindless_id }
+    }
+
+    pub fn make_global_cubemap(&mut self, info: &ImageInfo) -> TransientImage {
+        let handle = unsafe { self.ctx.as_mut() }
+            .make_image(info)
+            .expect("Make global cubemap");
+        let bindless_id = self.register_bindless_image(handle, true);
+        self.global_images.insert(handle, (bindless_id, true));
 
         let view = ImageView {
             img: handle,
@@ -525,8 +564,15 @@ impl TransientAllocator {
     }
 
     pub fn destroy_global_image(&mut self, image: Handle<Image>) {
-        if self.global_images.remove(&image).is_some() {
-            self.unregister_bindless_texture(image);
+        if let Some((_, is_cubemap)) = self.global_images.remove(&image) {
+            self.unregister_bindless_image(image, is_cubemap);
+            unsafe { self.ctx.as_mut() }.destroy_image(image);
+        }
+    }
+
+    pub fn destroy_global_cubemap(&mut self, image: Handle<Image>) {
+        if let Some((_, is_cubemap)) = self.global_images.remove(&image) {
+            self.unregister_bindless_image(image, is_cubemap);
             unsafe { self.ctx.as_mut() }.destroy_image(image);
         }
     }
@@ -544,7 +590,7 @@ impl Drop for TransientAllocator {
             handles.push(*img);
         }
         for handle in handles {
-            self.unregister_bindless_texture(handle);
+            self.unregister_bindless_image(handle, false);
             ctx.destroy_image(handle);
         }
 
@@ -570,7 +616,7 @@ impl Drop for TransientAllocator {
             }
         }
         for handle in handles {
-            self.unregister_bindless_texture(handle);
+            self.unregister_bindless_image(handle, false);
             ctx.destroy_image(handle);
         }
 
@@ -592,7 +638,7 @@ impl Drop for TransientAllocator {
 
         let handles: Vec<_> = self.free_images.drain(..).collect();
         for handle in handles {
-            self.unregister_bindless_texture(handle);
+            self.unregister_bindless_image(handle, false);
             ctx.destroy_image(handle);
         }
 
@@ -611,10 +657,10 @@ impl Drop for TransientAllocator {
         let handles: Vec<_> = self
             .global_images
             .drain()
-            .map(|(handle, _)| handle)
+            .map(|(handle, (_, is_cubemap))| (handle, is_cubemap))
             .collect();
-        for handle in handles {
-            self.unregister_bindless_texture(handle);
+        for (handle, is_cubemap) in handles {
+            self.unregister_bindless_image(handle, is_cubemap);
             ctx.destroy_image(handle);
         }
     }
