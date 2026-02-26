@@ -1,9 +1,9 @@
+use std::collections::HashSet;
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     hash::{Hash, Hasher},
     ptr::NonNull,
 };
-use std::collections::HashSet;
 
 use dashi::*;
 
@@ -159,6 +159,7 @@ pub struct TransientAllocator {
     free_buffers: Vec<Handle<Buffer>>,
     free_renderpasses: Vec<Handle<RenderPass>>,
     free_semaphores: Vec<Handle<Semaphore>>,
+    global_images: HashMap<Handle<Image>, Option<u16>>,
     bindless_registry: Option<BindlessRegistry>,
     bindless_image_ids: HashMap<Handle<Image>, u16>,
 }
@@ -179,13 +180,14 @@ impl TransientAllocator {
             free_buffers: Vec::new(),
             free_renderpasses: Vec::new(),
             free_semaphores: Vec::new(),
+            global_images: HashMap::new(),
             bindless_registry: None,
             bindless_image_ids: HashMap::new(),
         }
     }
-    
+
     pub fn context(&self) -> &Context {
-        unsafe{self.ctx.as_ref()}
+        unsafe { self.ctx.as_ref() }
     }
 
     pub fn new_with_bindless_registry(
@@ -210,8 +212,8 @@ impl TransientAllocator {
         if let Some(existing) = self.bindless_image_ids.get(&handle) {
             return Some(*existing);
         }
-        
-        let aspect = match unsafe{self.ctx.as_ref()}.image_info(handle).format {
+
+        let aspect = match unsafe { self.ctx.as_ref() }.image_info(handle).format {
             Format::D24S8 => AspectMask::Depth,
             _ => AspectMask::Color,
         };
@@ -269,7 +271,10 @@ impl TransientAllocator {
         }
 
         for sem in self.semaphores.get_mut(stale_index).drain(..) {
-            self.available_semaphores.push(ReuseEntry { handle: sem, age: 0 });
+            self.available_semaphores.push(ReuseEntry {
+                handle: sem,
+                age: 0,
+            });
         }
     }
 
@@ -488,7 +493,11 @@ impl TransientAllocator {
             .iter()
             .rposition(|entry| !in_use.contains(&entry.handle))
             .map(|index| self.available_semaphores.swap_remove(index).handle)
-            .unwrap_or_else(|| unsafe { self.ctx.as_mut() }.make_semaphore().expect("Make transient semaphore"));
+            .unwrap_or_else(|| {
+                unsafe { self.ctx.as_mut() }
+                    .make_semaphore()
+                    .expect("Make transient semaphore")
+            });
 
         self.semaphores.data_mut().push(handle);
 
@@ -497,6 +506,29 @@ impl TransientAllocator {
 
     pub fn make_semaphores(&mut self, count: usize) -> Vec<Handle<Semaphore>> {
         (0..count).map(|_| self.make_semaphore()).collect()
+    }
+
+    // Make a non-transient image that stays valid until explicitly destroyed.
+    pub fn make_global_image(&mut self, info: &ImageInfo) -> TransientImage {
+        let handle = unsafe { self.ctx.as_mut() }
+            .make_image(info)
+            .expect("Make global image");
+        let bindless_id = self.register_bindless_texture(handle);
+        self.global_images.insert(handle, bindless_id);
+
+        let view = ImageView {
+            img: handle,
+            ..Default::default()
+        };
+
+        TransientImage { view, bindless_id }
+    }
+
+    pub fn destroy_global_image(&mut self, image: Handle<Image>) {
+        if self.global_images.remove(&image).is_some() {
+            self.unregister_bindless_texture(image);
+            unsafe { self.ctx.as_mut() }.destroy_image(image);
+        }
     }
 }
 
@@ -574,6 +606,16 @@ impl Drop for TransientAllocator {
 
         for handle in self.free_semaphores.drain(..) {
             ctx.destroy_semaphore(handle);
+        }
+
+        let handles: Vec<_> = self
+            .global_images
+            .drain()
+            .map(|(handle, _)| handle)
+            .collect();
+        for handle in handles {
+            self.unregister_bindless_texture(handle);
+            ctx.destroy_image(handle);
         }
     }
 }

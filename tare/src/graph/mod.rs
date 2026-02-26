@@ -1,6 +1,6 @@
-use std::ptr::NonNull;
 use std::mem;
 use std::panic;
+use std::ptr::NonNull;
 
 use crate::transient::{BindlessTextureRegistry, TransientAllocator, TransientImage};
 use crate::utils::ThreadPool;
@@ -121,6 +121,15 @@ impl RenderGraph {
         self.alloc.as_mut().make_image(info)
     }
 
+    // Make a non-transient image that stays valid until explicitly destroyed.
+    pub fn make_global_image(&mut self, info: &ImageInfo) -> TransientImage {
+        self.alloc.as_mut().make_global_image(info)
+    }
+
+    pub fn destroy_global_image(&mut self, image: Handle<Image>) {
+        self.alloc.as_mut().destroy_global_image(image);
+    }
+
     // Make a transient buffer matching the parameters input
     pub fn make_buffer(&mut self, info: &BufferInfo) -> BufferView {
         self.alloc.as_mut().make_buffer(info)
@@ -163,9 +172,7 @@ impl RenderGraph {
         let cb = unsafe {
             mem::transmute::<
                 Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable>>,
-                Box<
-                    dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable> + Send,
-                >,
+                Box<dyn FnMut(CommandStream<Recording>) -> CommandStream<Executable> + Send>,
             >(cb)
         };
         self.passes
@@ -292,13 +299,13 @@ impl RenderGraph {
                     let end_label = format!("subpass end: {label}");
                     handles.push(self.thread_pool.execute(move || {
                         let mut stream = CommandStream::new().begin();
+                        stream = stream.debug_label(&start_label);
                         let mut subpass_stream = stream.begin_render_pass(&begin);
-                        subpass_stream = subpass_stream.debug_label(&start_label);
                         subpass_stream = (subpass.cb)(subpass_stream);
-                        subpass_stream = subpass_stream.debug_label(&end_label);
                         stream = subpass_stream
                             .stop_drawing()
-                            .sync(SyncPoint::GraphicsToGraphics, Scope::All);
+                            .sync(SyncPoint::GraphicsToGraphics, Scope::All)
+                            .debug_label(&end_label);
                         stream.end()
                     }));
                 }

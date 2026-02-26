@@ -44,7 +44,7 @@ impl ReservedBindlessCamera {
     }
 
     pub fn remove_camera(&mut self, camera: Handle<Camera>) {
-        if camera.valid() && (camera.slot as usize) < 512 {
+        if camera.valid() {
             self.available.push(camera.slot);
         }
     }
