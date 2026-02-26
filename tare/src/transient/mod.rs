@@ -155,13 +155,14 @@ struct ImageReuseEntry {
     handle: Handle<Image>,
     age: usize,
     bindless_id: Option<u16>,
+    is_cubemap: bool,
 }
 
 const MAX_FRAMES: usize = 3;
 const UNUSED_RETIRE_THRESHOLD: usize = MAX_FRAMES * 12;
 pub struct TransientAllocator {
     ctx: NonNull<Context>,
-    images: Ring<Vec<(ImageKey, Handle<Image>, Option<u16>)>, MAX_FRAMES>,
+    images: Ring<Vec<(ImageKey, Handle<Image>, Option<u16>, bool)>, MAX_FRAMES>,
     buffers: Ring<Vec<(BufferKey, Handle<Buffer>)>, MAX_FRAMES>,
     renderpasses: Ring<Vec<(u64, Handle<RenderPass>)>, MAX_FRAMES>,
     semaphores: Ring<Vec<Handle<Semaphore>>, MAX_FRAMES>,
@@ -169,7 +170,7 @@ pub struct TransientAllocator {
     available_buffers: HashMap<BufferKey, Vec<ReuseEntry<Handle<Buffer>>>>,
     available_renderpasses: HashMap<u64, Vec<ReuseEntry<Handle<RenderPass>>>>,
     available_semaphores: Vec<ReuseEntry<Handle<Semaphore>>>,
-    free_images: Vec<Handle<Image>>,
+    free_images: Vec<(Handle<Image>, bool)>,
     free_buffers: Vec<Handle<Buffer>>,
     free_renderpasses: Vec<Handle<RenderPass>>,
     free_semaphores: Vec<Handle<Semaphore>>,
@@ -266,7 +267,7 @@ impl TransientAllocator {
     fn check_for_stale(&mut self) {
         let stale_index = (self.images.current() + 1) % MAX_FRAMES;
 
-        for (key, img, bindless_id) in self.images.get_mut(stale_index).drain(..) {
+        for (key, img, bindless_id, is_cubemap) in self.images.get_mut(stale_index).drain(..) {
             self.available_images
                 .entry(key)
                 .or_default()
@@ -274,6 +275,7 @@ impl TransientAllocator {
                     handle: img,
                     age: 0,
                     bindless_id,
+                    is_cubemap,
                 });
         }
 
@@ -312,7 +314,7 @@ impl TransientAllocator {
             list.retain_mut(|entry| {
                 entry.age += 1;
                 if entry.age >= UNUSED_RETIRE_THRESHOLD {
-                    free_images.push(entry.handle);
+                    free_images.push((entry.handle, entry.is_cubemap));
                     false
                 } else {
                     true
@@ -367,8 +369,8 @@ impl TransientAllocator {
         let ctx = unsafe { self.ctx.as_mut() };
 
         let handles: Vec<_> = self.free_images.drain(..).collect();
-        for handle in handles {
-            self.unregister_bindless_image(handle, false);
+        for (handle, is_cubemap) in handles {
+            self.unregister_bindless_image(handle, is_cubemap);
             ctx.destroy_image(handle);
         }
         for handle in self.free_buffers.drain(..) {
@@ -391,19 +393,29 @@ impl TransientAllocator {
 
     // Make a transient image matching the parameters input from this frame.
     pub fn make_image(&mut self, info: &ImageInfo) -> TransientImage {
+        self.make_image_inner(info, false)
+    }
+
+    pub fn make_cubemap(&mut self, info: &ImageInfo) -> TransientImage {
+        self.make_image_inner(info, true)
+    }
+
+    fn make_image_inner(&mut self, info: &ImageInfo, cubemap: bool) -> TransientImage {
         let key = ImageKey::from(info);
         let in_use: HashSet<Handle<Image>> = self
             .images
             .data()
             .iter()
-            .map(|(_, handle, _)| *handle)
+            .map(|(_, handle, _, _)| *handle)
             .collect();
         let (handle, bindless_id) = self
             .available_images
             .get_mut(&key)
             .and_then(|list| {
                 list.iter()
-                    .rposition(|entry| !in_use.contains(&entry.handle))
+                    .rposition(|entry| {
+                        !in_use.contains(&entry.handle) && entry.is_cubemap == cubemap
+                    })
                     .map(|index| {
                         let entry = list.swap_remove(index);
                         (entry.handle, entry.bindless_id)
@@ -413,11 +425,13 @@ impl TransientAllocator {
                 let handle = unsafe { self.ctx.as_mut() }
                     .make_image(info)
                     .expect("Make transient image");
-                let bindless_id = self.register_bindless_image(handle, false);
+                let bindless_id = self.register_bindless_image(handle, cubemap);
                 (handle, bindless_id)
             });
 
-        self.images.data_mut().push((key, handle, bindless_id));
+        self.images
+            .data_mut()
+            .push((key, handle, bindless_id, cubemap));
 
         let view = ImageView {
             img: handle,
@@ -586,11 +600,11 @@ impl Drop for TransientAllocator {
         let ctx = unsafe { self.ctx.as_mut() };
 
         let mut handles = Vec::new();
-        for (_, img, _) in self.images.data.iter_mut().flatten() {
-            handles.push(*img);
+        for (_, img, _, is_cubemap) in self.images.data.iter_mut().flatten() {
+            handles.push((*img, *is_cubemap));
         }
-        for handle in handles {
-            self.unregister_bindless_image(handle, false);
+        for (handle, is_cubemap) in handles {
+            self.unregister_bindless_image(handle, is_cubemap);
             ctx.destroy_image(handle);
         }
 
@@ -612,11 +626,11 @@ impl Drop for TransientAllocator {
         let mut handles = Vec::new();
         for imgs in self.available_images.drain() {
             for entry in imgs.1 {
-                handles.push(entry.handle);
+                handles.push((entry.handle, entry.is_cubemap));
             }
         }
-        for handle in handles {
-            self.unregister_bindless_image(handle, false);
+        for (handle, is_cubemap) in handles {
+            self.unregister_bindless_image(handle, is_cubemap);
             ctx.destroy_image(handle);
         }
 
@@ -637,8 +651,8 @@ impl Drop for TransientAllocator {
         }
 
         let handles: Vec<_> = self.free_images.drain(..).collect();
-        for handle in handles {
-            self.unregister_bindless_image(handle, false);
+        for (handle, is_cubemap) in handles {
+            self.unregister_bindless_image(handle, is_cubemap);
             ctx.destroy_image(handle);
         }
 

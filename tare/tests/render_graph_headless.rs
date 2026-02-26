@@ -193,3 +193,28 @@ fn render_graph_can_reuse_allocator() {
 
     // Executing successfully proves the external allocator can be used without crashing.
 }
+
+#[test]
+fn render_graph_exposes_cubemap_allocators() {
+    unsafe {
+        std::env::set_var("DASHI_VALIDATION", "0");
+    }
+
+    let mut context = Context::headless(&Default::default()).expect("headless context");
+    let mut graph = RenderGraph::new(&mut context);
+
+    let info = ImageInfo {
+        debug_name: "[GRAPH CUBEMAP]",
+        dim: [4, 4, 1],
+        layers: 6,
+        ..Default::default()
+    };
+
+    let transient = graph.make_cubemap(&info);
+    let global = graph.make_global_cubemap(&info);
+
+    assert_ne!(transient.view.img, Handle::<Image>::default());
+    assert_ne!(global.view.img, Handle::<Image>::default());
+
+    graph.destroy_global_cubemap(global.view.img);
+}

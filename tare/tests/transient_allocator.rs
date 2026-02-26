@@ -76,3 +76,39 @@ fn global_image_lifetime_is_explicit() {
 
     allocator.destroy_global_image(global_image.view.img);
 }
+
+#[test]
+fn transient_cubemap_lifetime_and_reuse() {
+    unsafe {
+        std::env::set_var("DASHI_VALIDATION", "0");
+    }
+
+    let mut context = Context::headless(&Default::default()).expect("headless context");
+    let mut allocator = TransientAllocator::new(&mut context);
+
+    let cubemap_info = ImageInfo {
+        debug_name: "[TRANSIENT CUBEMAP]",
+        dim: [8, 8, 1],
+        layers: 6,
+        ..Default::default()
+    };
+
+    let first_cubemap = allocator.make_cubemap(&cubemap_info);
+    let second_cubemap = allocator.make_cubemap(&cubemap_info);
+
+    assert_ne!(
+        first_cubemap.view.img, second_cubemap.view.img,
+        "cubemaps allocated in the same frame should not share handles"
+    );
+
+    for _ in 0..16 {
+        allocator.advance();
+    }
+
+    let recycled_cubemap = allocator.make_cubemap(&cubemap_info);
+    assert!(
+        recycled_cubemap.view.img == first_cubemap.view.img
+            || recycled_cubemap.view.img == second_cubemap.view.img,
+        "transient cubemap resources should be recycled across frames"
+    );
+}

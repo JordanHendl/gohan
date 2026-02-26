@@ -121,13 +121,25 @@ impl RenderGraph {
         self.alloc.as_mut().make_image(info)
     }
 
+    pub fn make_cubemap(&mut self, info: &ImageInfo) -> TransientImage {
+        self.alloc.as_mut().make_cubemap(info)
+    }
+
     // Make a non-transient image that stays valid until explicitly destroyed.
     pub fn make_global_image(&mut self, info: &ImageInfo) -> TransientImage {
         self.alloc.as_mut().make_global_image(info)
     }
 
+    pub fn make_global_cubemap(&mut self, info: &ImageInfo) -> TransientImage {
+        self.alloc.as_mut().make_global_cubemap(info)
+    }
+
     pub fn destroy_global_image(&mut self, image: Handle<Image>) {
         self.alloc.as_mut().destroy_global_image(image);
+    }
+
+    pub fn destroy_global_cubemap(&mut self, image: Handle<Image>) {
+        self.alloc.as_mut().destroy_global_cubemap(image);
     }
 
     // Make a transient buffer matching the parameters input
