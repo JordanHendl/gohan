@@ -103,5 +103,6 @@ uniform StructuredBuffer<PerObjectJointTransform> meshi_per_obj_joints : registe
 
 // HELPERS
 float4 sample_texture(uint idx, float2 coords) {
+  if(idx == 0xffffffff) return float4(1.0, 0.0, 1.0, 1.0);
   return meshi_bindless_textures[idx].Sample(meshi_bindless_samplers[idx], coords);
 }
